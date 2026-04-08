@@ -1,7 +1,7 @@
 .PHONY: test
-test: listing_0039_reassembled # listing_0040_reassembled
+test: listing_0039_reassembled listing_0040_reassembled
 	diff listing_0039_reassembled listing_0039_more_movs
-	# diff listing_0040_reassembled listing_0040_challenge_movs
+	diff listing_0040_reassembled listing_0040_challenge_movs
 
 listing_0039_disassembled: listing_0039_more_movs build
 	target/debug/decode-2 < $< > $@
