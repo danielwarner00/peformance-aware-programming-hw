@@ -11,23 +11,15 @@ fn main() {
         let instruction = instructions[0];
         let instruction_size = if instruction >> 2 == 0b100010 {
             // register/memory to/from register
-            let d: bool = instruction >> 1 & 1 > 0;
-            let w: bool = instruction & 1 == 1;
-            let reg: u8 = instructions[1] >> 3 & 0b111;
-
-            let reg_str = register_name(reg, w);
-
-            print!("mov ");
-            if d {
-                print!("{reg_str}, ");
-                print_register_memory(instructions);
-                println!();
-            } else {
-                print_register_memory(instructions);
-                println!(", {reg_str}");
-            };
-
-            2 + instruction_displacement_bytes(instructions)
+            print_register_memory_instruction(instructions, "mov")
+        } else if instruction >> 2 == 0
+            || instruction >> 2 == 0b001010
+            || instruction >> 2 == 0b001110
+        {
+            print_register_memory_instruction(
+                instructions,
+                three_bit_to_opcode(instruction >> 3 & 7),
+            )
         } else if instruction >> 4 == 0b1011 {
             // immediate to register
             let w = instruction >> 3 & 1 == 1;
@@ -110,6 +102,37 @@ fn make_displacement(bytes: &[u8]) -> i16 {
     match bytes {
         [first] => *first as i8 as i16,
         [first, second] => (*first as u16 | (*second as u16) << 8) as i16,
+        _ => panic!(),
+    }
+}
+
+// returns number of bytes in instruction
+fn print_register_memory_instruction(instructions: &[u8], opcode: &'static str) -> usize {
+    let d: bool = instructions[0] >> 1 & 1 > 0;
+    let w: bool = instructions[0] & 1 == 1;
+    let reg: u8 = instructions[1] >> 3 & 0b111;
+
+    let reg_str = register_name(reg, w);
+
+    print!("{opcode} ");
+    if d {
+        print!("{reg_str}, ");
+        print_register_memory(instructions);
+        println!();
+    } else {
+        print_register_memory(instructions);
+        println!(", {reg_str}");
+    };
+
+    2 + instruction_displacement_bytes(instructions)
+}
+
+fn three_bit_to_opcode(three_bit: u8) -> &'static str {
+    assert!(three_bit < 8);
+    match three_bit {
+        0b000 => "add",
+        0b101 => "sub",
+        0b111 => "cmp",
         _ => panic!(),
     }
 }
