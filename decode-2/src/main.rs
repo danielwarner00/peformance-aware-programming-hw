@@ -81,7 +81,32 @@ fn main() {
             };
             print_immediate_to_accumulator_instruction(instructions, opcode)
         } else {
-            panic!();
+            print_simple_offset_instruction(
+                instructions,
+                match instruction {
+                    0x74 => "je",
+                    0x7c => "jl",
+                    0x7e => "jle",
+                    0x72 => "jb",
+                    0x76 => "jbe",
+                    0x7a => "jp",
+                    0x70 => "jo",
+                    0x78 => "js",
+                    0x75 => "jne",
+                    0x7d => "jnl",
+                    0x7f => "jnle",
+                    0x73 => "jnb",
+                    0x77 => "jnbe",
+                    0x7b => "jnp",
+                    0x71 => "jno",
+                    0x79 => "jns",
+                    0xe2 => "loop",
+                    0xe1 => "loopz",
+                    0xe0 => "loopnz",
+                    0xe3 => "jcxz",
+                    _ => panic!(),
+                },
+            )
         };
 
         instructions = &instructions[instruction_size..];
@@ -174,6 +199,12 @@ fn print_immediate_to_accumulator_instruction(instructions: &[u8], opcode: &'sta
     println!("{opcode} {register}, {data}");
 
     if w { 3 } else { 2 }
+}
+
+fn print_simple_offset_instruction(instructions: &[u8], opcode: &'static str) -> usize {
+    let data = instructions[1] as i8;
+    println!("{opcode}, {data}");
+    2
 }
 
 fn three_bit_to_opcode(three_bit: u8) -> &'static str {
