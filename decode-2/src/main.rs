@@ -35,35 +35,21 @@ fn main() {
 
             1 + data_bytes
         } else if instruction >> 1 == 0b1100011 {
-            // immediate to register/memory
             assert_eq!(instructions[1] >> 3 & 7, 0);
-            let w = instruction & 1 == 1;
-            let r#mod = instructions[1] >> 6 & 3;
-
-            let data_start_index = 2 + instruction_displacement_bytes(instructions);
-
-            let (data, data_bytes) = if w {
-                (
-                    (instructions[data_start_index] as u16)
-                        | (instructions[data_start_index + 1] as u16) << 8,
-                    2,
-                )
-            } else {
-                (instructions[data_start_index] as u16, 1)
-            };
-
-            let memory = r#mod != 0b11;
-
-            print!("mov ");
-            print_register_memory(instructions);
-            let size = if memory {
-                if w { "word " } else { "byte " }
-            } else {
-                ""
-            };
-            println!(", {size}{data}");
-
-            data_start_index + data_bytes
+            print_immediate_to_registry_memory_instruction(
+                instructions,
+                "mov",
+                false,
+                instruction & 1 == 1,
+            )
+        } else if instruction >> 2 == 0b100000 {
+            let s = instruction >> 1 & 1 == 1;
+            print_immediate_to_registry_memory_instruction(
+                instructions,
+                three_bit_to_opcode(instructions[1] >> 3 & 7),
+                s,
+                !s && instruction & 1 == 1,
+            )
         } else if instruction >> 2 == 0b101000 {
             let w = instruction & 1 == 1;
             let d = instruction >> 1 & 1 == 1;
@@ -82,6 +68,18 @@ fn main() {
             }
 
             if w { 3 } else { 2 }
+        } else if instruction >> 1 == 0b10
+            || instruction >> 1 == 0b10110
+            || instruction >> 1 == 0b11110
+        {
+            let code = instruction >> 1;
+            let opcode = match code {
+                0b10 => "add",
+                0b10110 => "sub",
+                0b11110 => "cmp",
+                _ => unreachable!(),
+            };
+            print_immediate_to_accumulator_instruction(instructions, opcode)
         } else {
             panic!();
         };
@@ -125,6 +123,57 @@ fn print_register_memory_instruction(instructions: &[u8], opcode: &'static str) 
     };
 
     2 + instruction_displacement_bytes(instructions)
+}
+
+fn print_immediate_to_registry_memory_instruction(
+    instructions: &[u8],
+    opcode: &'static str,
+    sign_extend: bool,
+    wide: bool,
+) -> usize {
+    let r#mod = instructions[1] >> 6 & 3;
+    let w = instructions[0] & 1 != 0;
+
+    let data_start_index = 2 + instruction_displacement_bytes(instructions);
+
+    let (data, data_bytes) = match (sign_extend, wide) {
+        (false, true) => (
+            (instructions[data_start_index] as u16)
+                | (instructions[data_start_index + 1] as u16) << 8,
+            2,
+        ),
+        (true, true) => (instructions[data_start_index] as i8 as u16, 2),
+        _ => (instructions[data_start_index] as u16, 1),
+    };
+
+    let memory = r#mod != 0b11;
+
+    let destination_size = if memory {
+        if w { "word " } else { "byte " }
+    } else {
+        ""
+    };
+    print!("{opcode} {destination_size}");
+    print_register_memory(instructions);
+    println!(", {data}");
+
+    data_start_index + data_bytes
+}
+
+fn print_immediate_to_accumulator_instruction(instructions: &[u8], opcode: &'static str) -> usize {
+    let w = instructions[0] & 1 == 1;
+
+    let data = if w {
+        instructions[1] as u16 | (instructions[2] as u16) << 8
+    } else {
+        instructions[1] as u16
+    };
+
+    let register = if w { "ax" } else { "al" };
+
+    println!("{opcode} {register}, {data}");
+
+    if w { 3 } else { 2 }
 }
 
 fn three_bit_to_opcode(three_bit: u8) -> &'static str {
