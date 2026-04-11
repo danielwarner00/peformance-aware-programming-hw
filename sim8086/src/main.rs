@@ -77,7 +77,7 @@ impl DisplacementBase {
             DisplacementBase::Si,
             DisplacementBase::Di,
             DisplacementBase::Bp,
-            DisplacementBase::BX,
+            DisplacementBase::Bx,
         ][rm as usize]
     }
 }
@@ -429,7 +429,6 @@ fn decode_instruction(instructions: &[u8]) -> (Instruction, &[u8]) {
             BinaryOperation::from_three_bit(instruction >> 3 & 7),
         )
     } else if instruction >> 4 == 0b1011 {
-        // eprintln!("hit point");
         // immediate to register
         let w = instruction >> 3 & 1 == 1;
         let reg = instruction & 7;
