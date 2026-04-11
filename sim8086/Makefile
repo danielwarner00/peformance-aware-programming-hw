@@ -5,16 +5,16 @@ test: listing_0039_reassembled listing_0039_more_movs listing_0040_reassembled l
 	diff listing_0041_reduced_reassembled listing_0041_reduced
 
 listing_0039_disassembled: listing_0039_more_movs build
-	target/debug/sim8086 < $< > $@
+	target/debug/sim8086 decode < $< > $@
 
 listing_0040_disassembled: listing_0040_challenge_movs build
-	target/debug/sim8086 < $< > $@
+	target/debug/sim8086 decode < $< > $@
 
 listing_0041_disassembled: listing_0041_add_sub_cmp_jnz build
-	target/debug/sim8086 < $< > $@
+	target/debug/sim8086 decode < $< > $@
 
 listing_0041_reduced_disassembled: listing_0041_reduced build
-	target/debug/sim8086 < $< > $@
+	target/debug/sim8086 decode < $< > $@
 
 listing_0039_reassembled: listing_0039_disassembled
 	nasm $< -o $@

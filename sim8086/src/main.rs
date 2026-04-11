@@ -1,6 +1,26 @@
 use std::io::Read;
+use std::process::ExitCode;
 
-fn main() {
+fn main() -> ExitCode {
+    let command = std::env::args().nth(1);
+    match command.as_ref().map(|s| s.as_str()) {
+        Some("decode") => {
+            decode();
+            ExitCode::SUCCESS
+        }
+        Some(_) => {
+            eprintln!("no such command");
+            ExitCode::FAILURE
+        }
+        None => {
+            eprintln!("no command provided");
+            ExitCode::FAILURE
+        }
+    }
+}
+
+// reads instructions on stdin and output disassembled instructions to stdout
+fn decode() {
     let mut input = Vec::new();
     std::io::stdin().read_to_end(&mut input).unwrap();
     let mut instructions = input.as_slice();
