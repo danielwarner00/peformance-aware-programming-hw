@@ -192,31 +192,16 @@ impl Display for Location {
 }
 
 #[derive(Clone, Copy)]
-enum Operand8 {
-    Immediate(u8),
-    Location(Location),
-}
-
-impl Display for Operand8 {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Operand8::Immediate(s) => write!(f, "byte {}", s),
-            Operand8::Location(s) => write!(f, "{}", s),
-        }
-    }
-}
-
-#[derive(Clone, Copy)]
-enum Operand16 {
+enum Operand {
     Immediate(u16),
     Location(Location),
 }
 
-impl Display for Operand16 {
+impl Display for Operand {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Operand16::Immediate(s) => write!(f, "word {}", s),
-            Operand16::Location(s) => write!(f, "{}", s),
+            Operand::Immediate(s) => write!(f, "{}", s),
+            Operand::Location(s) => write!(f, "{}", s),
         }
     }
 }
@@ -344,12 +329,12 @@ enum Instruction {
     Binary8 {
         operation: BinaryOperation,
         destination: Location,
-        source: Operand8,
+        source: Operand,
     },
     Binary16 {
         operation: BinaryOperation,
         destination: Location,
-        source: Operand16,
+        source: Operand,
     },
     Jump {
         operation: JumpOperation,
@@ -376,7 +361,14 @@ impl Display for Instruction {
                 operation,
                 destination,
                 source,
-            } => write!(f, "{} {}, {}", operation, destination, source),
+            } => {
+                let size = if let Location::Memory(_) = destination {
+                    "word "
+                } else {
+                    ""
+                };
+                write!(f, "{} {size}{}, {}", operation, destination, source)
+            }
             Instruction::Jump {
                 operation,
                 displacement,
@@ -406,7 +398,7 @@ fn decode_instruction(instructions: &[u8]) -> (Instruction, &[u8]) {
                 Instruction::Binary16 {
                     operation: BinaryOperation::Mov,
                     destination: Location::Register(Register::from_reg_field(reg, true)),
-                    source: Operand16::Immediate(
+                    source: Operand::Immediate(
                         (instructions[1] as u16) | (instructions[2] as u16) << 8,
                     ),
                 },
@@ -417,7 +409,7 @@ fn decode_instruction(instructions: &[u8]) -> (Instruction, &[u8]) {
                 Instruction::Binary8 {
                     operation: BinaryOperation::Mov,
                     destination: Location::Register(Register::from_reg_field(reg, false)),
-                    source: Operand8::Immediate(instructions[1]),
+                    source: Operand::Immediate(instructions[1] as u16),
                 },
                 2,
             )
@@ -453,7 +445,7 @@ fn decode_instruction(instructions: &[u8]) -> (Instruction, &[u8]) {
             Instruction::Binary16 {
                 operation: BinaryOperation::Mov,
                 destination,
-                source: Operand16::Location(source),
+                source: Operand::Location(source),
             }
         };
         (decoded_instruction, if w { 3 } else { 2 })
@@ -503,7 +495,7 @@ fn decode_register_memory_instruction(
         Instruction::Binary16 {
             operation,
             destination,
-            source: Operand16::Location(source),
+            source: Operand::Location(source),
         }
     } else {
         let register = Location::Register(Register::from_reg_field(reg, false));
@@ -517,7 +509,7 @@ fn decode_register_memory_instruction(
         Instruction::Binary8 {
             operation,
             destination,
-            source: Operand8::Location(source),
+            source: Operand::Location(source),
         }
     };
 
@@ -549,7 +541,7 @@ fn decode_immediate_to_register_memory_instruction(
             Instruction::Binary16 {
                 operation,
                 destination: decode_register_memory(instructions, true),
-                source: Operand16::Immediate(immediate),
+                source: Operand::Immediate(immediate),
             },
             data_size,
         )
@@ -558,7 +550,7 @@ fn decode_immediate_to_register_memory_instruction(
             Instruction::Binary8 {
                 operation,
                 destination: decode_register_memory(instructions, false),
-                source: Operand8::Immediate(instructions[data_start_index]),
+                source: Operand::Immediate(instructions[data_start_index] as u16),
             },
             1,
         )
@@ -578,9 +570,7 @@ fn decode_immediate_to_accumulator_instruction(
             Instruction::Binary16 {
                 operation,
                 destination: Location::Register(Register::AX),
-                source: Operand16::Immediate(
-                    instructions[1] as u16 | (instructions[2] as u16) << 8,
-                ),
+                source: Operand::Immediate(instructions[1] as u16 | (instructions[2] as u16) << 8),
             },
             3,
         )
@@ -589,7 +579,7 @@ fn decode_immediate_to_accumulator_instruction(
             Instruction::Binary8 {
                 operation,
                 destination: Location::Register(Register::AL),
-                source: Operand8::Immediate(instructions[1]),
+                source: Operand::Immediate(instructions[1] as u16),
             },
             2,
         )
