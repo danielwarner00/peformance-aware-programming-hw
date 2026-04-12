@@ -28,14 +28,16 @@ fn main() -> ExitCode {
 fn execute() {
     let mut input = Vec::new();
     std::io::stdin().read_to_end(&mut input).unwrap();
-    let mut instructions = input.as_slice();
+    let instructions = input.as_slice();
 
     let mut processor = Box::new(Processor::new());
 
     println!("bits 16");
 
-    while !instructions.is_empty() {
-        let (instruction, rest) = decode_instruction(instructions);
+    while (processor.ip as usize) < instructions.len() {
+        let (instruction, size) = decode_instruction(&instructions[(processor.ip as usize)..]);
+        processor.ip += size;
+
         print!("{}", instruction);
 
         if let Instruction::Binary {
@@ -73,8 +75,6 @@ fn execute() {
         }
 
         println!();
-
-        instructions = rest
     }
 
     println!("\nFinal registers:");
@@ -104,9 +104,9 @@ fn decode() {
     println!("bits 16");
 
     while !instructions.is_empty() {
-        let (instruction, rest) = decode_instruction(instructions);
+        let (instruction, size) = decode_instruction(instructions);
         println!("{}", instruction);
-        instructions = rest
+        instructions = &instructions[(size as usize)..]
     }
 }
 
@@ -119,6 +119,7 @@ struct Processor {
     bp: u16,
     si: u16,
     di: u16,
+    ip: u16,
     sf: bool, // sign flag
     zf: bool, // zero flag
     memory: [u8; 0x10000],
@@ -135,6 +136,7 @@ impl Processor {
             bp: 0,
             si: 0,
             di: 0,
+            ip: 0,
             sf: false,
             zf: false,
             memory: [0; 0x10000],
@@ -636,7 +638,7 @@ impl Display for Instruction {
     }
 }
 
-fn decode_instruction(instructions: &[u8]) -> (Instruction, &[u8]) {
+fn decode_instruction(instructions: &[u8]) -> (Instruction, u16) {
     let instruction = instructions[0];
     let (decoded_instruction, instruction_size) = if instruction >> 2 == 0b100010 {
         // register/memory to/from register
@@ -717,7 +719,7 @@ fn decode_instruction(instructions: &[u8]) -> (Instruction, &[u8]) {
         decode_jump_instruction(instructions, JumpOperation::from_byte(instruction).unwrap())
     };
 
-    (decoded_instruction, &instructions[instruction_size..])
+    (decoded_instruction, instruction_size)
 }
 
 fn make_displacement(bytes: &[u8]) -> i16 {
@@ -732,7 +734,7 @@ fn make_displacement(bytes: &[u8]) -> i16 {
 fn decode_register_memory_instruction(
     instructions: &[u8],
     operation: BinaryOperation,
-) -> (Instruction, usize) {
+) -> (Instruction, u16) {
     let d: bool = instructions[0] >> 1 & 1 > 0;
     let w: bool = instructions[0] & 1 == 1;
     let reg: u8 = instructions[1] >> 3 & 0b111;
@@ -761,22 +763,22 @@ fn decode_immediate_to_register_memory_instruction(
     instructions: &[u8],
     operation: BinaryOperation,
     sign_extend: bool,
-) -> (Instruction, usize) {
+) -> (Instruction, u16) {
     let w = instructions[0] & 1 == 1;
     let data_start_index = 2 + instruction_displacement_bytes(instructions);
 
     let (immediate, data_size) = if w {
         if sign_extend {
-            (instructions[data_start_index] as i8 as u16, 1)
+            (instructions[data_start_index as usize] as i8 as u16, 1)
         } else {
             (
-                (instructions[data_start_index] as u16)
-                    | (instructions[data_start_index + 1] as u16) << 8,
+                (instructions[data_start_index as usize] as u16)
+                    | (instructions[(data_start_index + 1) as usize] as u16) << 8,
                 2,
             )
         }
     } else {
-        (instructions[data_start_index] as u16, 1)
+        (instructions[data_start_index as usize] as u16, 1)
     };
 
     (
@@ -786,14 +788,14 @@ fn decode_immediate_to_register_memory_instruction(
             source: Operand::Immediate(immediate),
             wide: w,
         },
-        data_start_index + data_size,
+        (data_start_index + data_size) as u16,
     )
 }
 
 fn decode_immediate_to_accumulator_instruction(
     instructions: &[u8],
     operation: BinaryOperation,
-) -> (Instruction, usize) {
+) -> (Instruction, u16) {
     let w = instructions[0] & 1 == 1;
 
     let (register, immediate, instruction_size) = if w {
@@ -817,7 +819,7 @@ fn decode_immediate_to_accumulator_instruction(
     )
 }
 
-fn decode_jump_instruction(instructions: &[u8], operation: JumpOperation) -> (Instruction, usize) {
+fn decode_jump_instruction(instructions: &[u8], operation: JumpOperation) -> (Instruction, u16) {
     (
         Instruction::Jump {
             operation,
@@ -858,7 +860,7 @@ fn decode_memory_target(instructions: &[u8]) -> MemoryLocation {
     }
 }
 
-fn instruction_displacement_bytes(instructions: &[u8]) -> usize {
+fn instruction_displacement_bytes(instructions: &[u8]) -> u16 {
     let rm: u8 = instructions[1] & 0b111;
     let r#mod: u8 = instructions[1] >> 6 & 0b11;
 
