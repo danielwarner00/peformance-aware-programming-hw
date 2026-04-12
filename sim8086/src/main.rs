@@ -4,10 +4,15 @@ use std::io::Read;
 use std::process::ExitCode;
 
 fn main() -> ExitCode {
-    let command = std::env::args().nth(1);
+    let mut args = std::env::args();
+    let command = args.nth(1);
     match command.as_deref() {
         Some("execute") => {
-            execute();
+            let processor = execute();
+            if let Some("--dump") = args.next().as_deref() {
+                let path = args.next().unwrap();
+                std::fs::write(path, processor.memory).unwrap();
+            }
             ExitCode::SUCCESS
         }
         Some("decode") => {
@@ -25,7 +30,7 @@ fn main() -> ExitCode {
     }
 }
 
-fn execute() {
+fn execute() -> Box<Processor> {
     let mut input = Vec::new();
     std::io::stdin().read_to_end(&mut input).unwrap();
     let instructions = input.as_slice();
@@ -116,6 +121,8 @@ fn execute() {
         print!("Z");
     }
     println!();
+
+    processor
 }
 
 // reads instructions on stdin and output disassembled instructions to stdout

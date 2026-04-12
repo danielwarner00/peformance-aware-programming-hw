@@ -35,3 +35,7 @@ clean:
 .PHONY: execute
 execute: build/$(BIN) target/debug/sim8086
 	target/debug/sim8086 execute < build/$(BIN)
+
+.PHONY: build/image.data
+build/image.data: target/debug/sim8086 build/listing_0054_draw_rectangle.bin | build
+	target/debug/sim8086 execute --dump $@ < build/listing_0054_draw_rectangle.bin
