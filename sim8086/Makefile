@@ -41,6 +41,9 @@ listing_0045_challenge_register_movs.asm \
 listing_0046_add_sub_cmp.asm \
 listing_0048_ip_register.asm \
 listing_0049_conditional_jumps.asm \
+listing_0051_memory_mov.asm \
+listing_0052_memory_add_loop.asm \
+listing_0053_add_loop_challenge.asm \
 :
 	curl -O https://raw.githubusercontent.com/cmuratori/computer_enhance/refs/heads/main/perfaware/part1/$@
 
@@ -69,6 +72,15 @@ listing_0048_ip_register: listing_0048_ip_register.asm
 	nasm $<
 
 listing_0049_conditional_jumps: listing_0049_conditional_jumps.asm
+	nasm $<
+
+listing_0051_memory_mov: listing_0051_memory_mov.asm
+	nasm $<
+
+listing_0052_memory_add_loop: listing_0052_memory_add_loop.asm
+	nasm $<
+
+listing_0053_add_loop_challenge: listing_0053_add_loop_challenge.asm
 	nasm $<
 
 listing_0041_reduced: listing_0041_reduced.asm

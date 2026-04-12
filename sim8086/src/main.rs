@@ -102,12 +102,12 @@ fn execute() {
         Register::SI,
         Register::DI,
     ] {
-        println!(
-            "    {register}: {:#06x} ({0:})",
-            processor.read_register(register)
-        );
+        let value = processor.read_register(register);
+        if value != 0 {
+            println!("    {register}: {value:#06x} ({value:})",);
+        }
     }
-    println!("    ip: {:#06x}", processor.ip);
+    println!("    ip: {:#06x} ({0:})", processor.ip);
     print!(" flags: ");
     if processor.sf {
         print!("S");
@@ -198,7 +198,10 @@ impl Processor {
                     self.write_location(destination, result_value, wide)
                 }
             }
-            Instruction::Jump { operation, displacement } => {
+            Instruction::Jump {
+                operation,
+                displacement,
+            } => {
                 if match operation {
                     JumpOperation::Je => self.zf,
                     JumpOperation::Js => self.sf,
@@ -208,7 +211,7 @@ impl Processor {
                 } {
                     self.ip = self.ip.wrapping_add(displacement as u16);
                 }
-            },
+            }
         }
     }
 
