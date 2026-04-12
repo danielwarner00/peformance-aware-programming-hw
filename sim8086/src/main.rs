@@ -198,7 +198,17 @@ impl Processor {
                     self.write_location(destination, result_value, wide)
                 }
             }
-            _ => unimplemented!(),
+            Instruction::Jump { operation, displacement } => {
+                if match operation {
+                    JumpOperation::Je => self.zf,
+                    JumpOperation::Js => self.sf,
+                    JumpOperation::Jne => !self.zf,
+                    JumpOperation::Jns => !self.sf,
+                    _ => unimplemented!(),
+                } {
+                    self.ip = self.ip.wrapping_add(displacement as u16);
+                }
+            },
         }
     }
 
