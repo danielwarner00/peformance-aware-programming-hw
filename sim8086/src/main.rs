@@ -86,8 +86,6 @@ fn execute() {
             if processor.zf {
                 print!("Z");
             }
-        } else {
-            processor.execute(instruction);
         }
 
         println!();
