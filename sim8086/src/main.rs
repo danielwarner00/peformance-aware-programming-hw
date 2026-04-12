@@ -35,40 +35,56 @@ fn execute() {
     println!("bits 16");
 
     while (processor.ip as usize) < instructions.len() {
+        let ip_before = processor.ip;
+        let sf_before = processor.sf;
+        let zf_before = processor.zf;
+
         let (instruction, size) = decode_instruction(&instructions[(processor.ip as usize)..]);
         processor.ip += size;
 
-        print!("{}", instruction);
-
-        if let Instruction::Binary {
-            operation,
+        let before = if let Instruction::Binary {
             destination: Location::Register(register),
             ..
         } = instruction
         {
-            let before = processor.read_register(register);
-            let sf_before = processor.sf;
-            let zf_before = processor.zf;
+            Some(processor.read_register(register))
+        } else {
+            None
+        };
+        processor.execute(instruction);
 
-            processor.execute(instruction);
+        print!("{};", instruction);
+
+        if let Instruction::Binary {
+            destination: Location::Register(register),
+            ..
+        } = instruction
+        {
+            let before = before.unwrap();
             let after = processor.read_register(register);
+            print!(" {register}:{before:#x}->{after:#x}");
+        };
 
-            print!(" ; {register}:{before:#x}->{after:#x}");
-            if let BinaryOperation::Add | BinaryOperation::Sub | BinaryOperation::Cmp = operation {
-                print!(" flags:");
-                if sf_before {
-                    print!("S");
-                }
-                if zf_before {
-                    print!("Z");
-                }
-                print!("->");
-                if processor.sf {
-                    print!("S");
-                }
-                if processor.zf {
-                    print!("Z");
-                }
+        print!(" ip:{ip_before:#x}->{:#x}", processor.ip);
+
+        if let Instruction::Binary {
+            operation: BinaryOperation::Add | BinaryOperation::Sub | BinaryOperation::Cmp,
+            ..
+        } = instruction
+        {
+            print!(" flags:");
+            if sf_before {
+                print!("S");
+            }
+            if zf_before {
+                print!("Z");
+            }
+            print!("->");
+            if processor.sf {
+                print!("S");
+            }
+            if processor.zf {
+                print!("Z");
             }
         } else {
             processor.execute(instruction);
@@ -93,6 +109,15 @@ fn execute() {
             processor.read_register(register)
         );
     }
+    println!("    ip: {:#06x}", processor.ip);
+    print!(" flags: ");
+    if processor.sf {
+        print!("S");
+    }
+    if processor.zf {
+        print!("Z");
+    }
+    println!();
 }
 
 // reads instructions on stdin and output disassembled instructions to stdout
@@ -601,6 +626,7 @@ impl Display for JumpOperation {
     }
 }
 
+#[derive(Clone, Copy)]
 enum Instruction {
     Binary {
         operation: BinaryOperation,
