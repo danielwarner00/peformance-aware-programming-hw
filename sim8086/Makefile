@@ -38,6 +38,7 @@ listing_0041_add_sub_cmp_jnz.asm \
 listing_0043_immediate_movs.asm \
 listing_0044_register_movs.asm \
 listing_0045_challenge_register_movs.asm \
+listing_0046_add_sub_cmp.asm \
 :
 	curl -O https://raw.githubusercontent.com/cmuratori/computer_enhance/refs/heads/main/perfaware/part1/$@
 
@@ -57,6 +58,9 @@ listing_0044_register_movs: listing_0044_register_movs.asm
 	nasm $<
 
 listing_0045_challenge_register_movs: listing_0045_challenge_register_movs.asm
+	nasm $<
+
+listing_0046_add_sub_cmp: listing_0046_add_sub_cmp.asm
 	nasm $<
 
 listing_0041_reduced: listing_0041_reduced.asm

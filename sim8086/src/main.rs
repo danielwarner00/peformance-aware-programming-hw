@@ -39,16 +39,35 @@ fn execute() {
         print!("{}", instruction);
 
         if let Instruction::Binary {
-            operation: BinaryOperation::Mov,
+            operation,
             destination: Location::Register(register),
             ..
         } = instruction
         {
             let before = processor.read_register(register);
+            let sf_before = processor.sf;
+            let zf_before = processor.zf;
+
             processor.execute(instruction);
             let after = processor.read_register(register);
 
             print!(" ; {register}:{before:#x}->{after:#x}");
+            if let BinaryOperation::Add | BinaryOperation::Sub | BinaryOperation::Cmp = operation {
+                print!(" flags:");
+                if sf_before {
+                    print!("S");
+                }
+                if zf_before {
+                    print!("Z");
+                }
+                print!("->");
+                if processor.sf {
+                    print!("S");
+                }
+                if processor.zf {
+                    print!("Z");
+                }
+            }
         } else {
             processor.execute(instruction);
         }
@@ -69,7 +88,10 @@ fn execute() {
         Register::SI,
         Register::DI,
     ] {
-        println!("    {register}: {:#06x} ({0:})", processor.read_register(register));
+        println!(
+            "    {register}: {:#06x} ({0:})",
+            processor.read_register(register)
+        );
     }
 }
 
@@ -97,6 +119,8 @@ struct Processor {
     bp: u16,
     si: u16,
     di: u16,
+    sf: bool, // sign flag
+    zf: bool, // zero flag
     memory: [u8; 0x10000],
 }
 
@@ -111,6 +135,8 @@ impl Processor {
             bp: 0,
             si: 0,
             di: 0,
+            sf: false,
+            zf: false,
             memory: [0; 0x10000],
         }
     }
@@ -118,7 +144,7 @@ impl Processor {
     fn execute(&mut self, instruction: Instruction) {
         match instruction {
             Instruction::Binary {
-                operation: BinaryOperation::Mov,
+                operation,
                 destination,
                 source,
                 wide,
@@ -128,7 +154,24 @@ impl Processor {
                     Operand::Location(location) => self.read_location(location),
                 };
 
-                self.write_location(destination, source_value, wide)
+                let destination_value = self.read_location(destination);
+
+                let (result_value, update_flags) = match operation {
+                    BinaryOperation::Mov => (source_value, false),
+                    BinaryOperation::Add => (destination_value.wrapping_add(source_value), true),
+                    BinaryOperation::Sub | BinaryOperation::Cmp => {
+                        (destination_value.wrapping_sub(source_value), true)
+                    }
+                };
+
+                if update_flags {
+                    self.sf = result_value >> 15 & 1 == 1;
+                    self.zf = result_value == 0;
+                }
+
+                if operation != BinaryOperation::Cmp {
+                    self.write_location(destination, result_value, wide)
+                }
             }
             _ => unimplemented!(),
         }
@@ -438,7 +481,7 @@ impl Display for Operand {
 }
 
 // instructions
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, PartialEq, Eq)]
 enum BinaryOperation {
     Mov,
     Add,
