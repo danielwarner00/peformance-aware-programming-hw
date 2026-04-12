@@ -348,16 +348,12 @@ impl Display for Instruction {
                 wide,
             } => {
                 let size = if let Location::Memory(_) = destination {
-                    if *wide {
-                        "word "
-                    } else {
-                        "byte "
-                    }
+                    if *wide { "word " } else { "byte " }
                 } else {
                     ""
                 };
                 write!(f, "{} {size}{}, {}", operation, destination, source)
-            },
+            }
             Instruction::Jump {
                 operation,
                 displacement,
@@ -382,29 +378,21 @@ fn decode_instruction(instructions: &[u8]) -> (Instruction, &[u8]) {
         let w = instruction >> 3 & 1 == 1;
         let reg = instruction & 7;
 
-        if w {
-            (
-                Instruction::Binary {
-                    operation: BinaryOperation::Mov,
-                    destination: Location::Register(Register::from_reg_field(reg, true)),
-                    source: Operand::Immediate(
-                        (instructions[1] as u16) | (instructions[2] as u16) << 8,
-                    ),
-                    wide: true,
-                },
-                3,
-            )
+        let (immediate, instruction_size) = if w {
+            ((instructions[1] as u16) | (instructions[2] as u16) << 8, 3)
         } else {
-            (
-                Instruction::Binary {
-                    operation: BinaryOperation::Mov,
-                    destination: Location::Register(Register::from_reg_field(reg, false)),
-                    source: Operand::Immediate(instructions[1] as u16),
-                    wide: false,
-                },
-                2,
-            )
-        }
+            (instructions[1] as u16, 2)
+        };
+
+        (
+            Instruction::Binary {
+                operation: BinaryOperation::Mov,
+                destination: Location::Register(Register::from_reg_field(reg, w)),
+                source: Operand::Immediate(immediate),
+                wide: w,
+            },
+            instruction_size,
+        )
     } else if instruction >> 1 == 0b1100011 {
         assert_eq!(instructions[1] >> 3 & 7, 0);
         decode_immediate_to_register_memory_instruction(instructions, BinaryOperation::Mov, false)
@@ -475,40 +463,22 @@ fn decode_register_memory_instruction(
     let w: bool = instructions[0] & 1 == 1;
     let reg: u8 = instructions[1] >> 3 & 0b111;
 
-    let instruction = if w {
-        let register = Location::Register(Register::from_reg_field(reg, true));
-        let register_memory = decode_register_memory(instructions, true);
+    let register = Location::Register(Register::from_reg_field(reg, w));
+    let register_memory = decode_register_memory(instructions, w);
 
-        let (destination, source) = if d {
-            (register, register_memory)
-        } else {
-            (register_memory, register)
-        };
-        Instruction::Binary {
-            operation,
-            destination,
-            source: Operand::Location(source),
-            wide: true,
-        }
+    let (destination, source) = if d {
+        (register, register_memory)
     } else {
-        let register = Location::Register(Register::from_reg_field(reg, false));
-        let register_memory = decode_register_memory(instructions, false);
-
-        let (destination, source) = if d {
-            (register, register_memory)
-        } else {
-            (register_memory, register)
-        };
-        Instruction::Binary {
-            operation,
-            destination,
-            source: Operand::Location(source),
-            wide: false,
-        }
+        (register_memory, register)
     };
 
     (
-        instruction,
+        Instruction::Binary {
+            operation,
+            destination,
+            source: Operand::Location(source),
+            wide: w,
+        },
         2 + instruction_displacement_bytes(instructions),
     )
 }
@@ -521,8 +491,8 @@ fn decode_immediate_to_register_memory_instruction(
     let w = instructions[0] & 1 == 1;
     let data_start_index = 2 + instruction_displacement_bytes(instructions);
 
-    let (instruction, data_size) = if w {
-        let (immediate, data_size) = if sign_extend {
+    let (immediate, data_size) = if w {
+        if sign_extend {
             (instructions[data_start_index] as i8 as u16, 1)
         } else {
             (
@@ -530,29 +500,20 @@ fn decode_immediate_to_register_memory_instruction(
                     | (instructions[data_start_index + 1] as u16) << 8,
                 2,
             )
-        };
-        (
-            Instruction::Binary {
-                operation,
-                destination: decode_register_memory(instructions, true),
-                source: Operand::Immediate(immediate),
-                wide: true,
-            },
-            data_size,
-        )
+        }
     } else {
-        (
-            Instruction::Binary {
-                operation,
-                destination: decode_register_memory(instructions, false),
-                source: Operand::Immediate(instructions[data_start_index] as u16),
-                wide: false,
-            },
-            1,
-        )
+        (instructions[data_start_index] as u16, 1)
     };
 
-    (instruction, data_start_index + data_size)
+    (
+        Instruction::Binary {
+            operation,
+            destination: decode_register_memory(instructions, w),
+            source: Operand::Immediate(immediate),
+            wide: w,
+        },
+        data_start_index + data_size,
+    )
 }
 
 fn decode_immediate_to_accumulator_instruction(
@@ -561,27 +522,25 @@ fn decode_immediate_to_accumulator_instruction(
 ) -> (Instruction, usize) {
     let w = instructions[0] & 1 == 1;
 
-    if w {
+    let (register, immediate, instruction_size) = if w {
         (
-            Instruction::Binary {
-                operation,
-                destination: Location::Register(Register::AX),
-                source: Operand::Immediate(instructions[1] as u16 | (instructions[2] as u16) << 8),
-                wide: true,
-            },
+            Register::AX,
+            instructions[1] as u16 | (instructions[2] as u16) << 8,
             3,
         )
     } else {
-        (
-            Instruction::Binary {
-                operation,
-                destination: Location::Register(Register::AL),
-                source: Operand::Immediate(instructions[1] as u16),
-                wide: false,
-            },
-            2,
-        )
-    }
+        (Register::AL, instructions[1] as u16, 2)
+    };
+
+    (
+        Instruction::Binary {
+            operation,
+            destination: Location::Register(register),
+            source: Operand::Immediate(immediate),
+            wide: w,
+        },
+        instruction_size,
+    )
 }
 
 fn decode_jump_instruction(instructions: &[u8], operation: JumpOperation) -> (Instruction, usize) {
