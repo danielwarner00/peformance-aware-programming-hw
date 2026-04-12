@@ -6,6 +6,10 @@ use std::process::ExitCode;
 fn main() -> ExitCode {
     let command = std::env::args().nth(1);
     match command.as_deref() {
+        Some("execute") => {
+            execute();
+            ExitCode::SUCCESS
+        }
         Some("decode") => {
             decode();
             ExitCode::SUCCESS
@@ -21,6 +25,54 @@ fn main() -> ExitCode {
     }
 }
 
+fn execute() {
+    let mut input = Vec::new();
+    std::io::stdin().read_to_end(&mut input).unwrap();
+    let mut instructions = input.as_slice();
+
+    let mut processor = Box::new(Processor::new());
+
+    println!("bits 16");
+
+    while !instructions.is_empty() {
+        let (instruction, rest) = decode_instruction(instructions);
+        print!("{}", instruction);
+
+        if let Instruction::Binary {
+            operation: BinaryOperation::Mov,
+            destination: Location::Register(register),
+            ..
+        } = instruction
+        {
+            let before = processor.read_register(register);
+            processor.execute(instruction);
+            let after = processor.read_register(register);
+
+            print!(" ; {register}:{before:#x}->{after:#x}");
+        } else {
+            processor.execute(instruction);
+        }
+
+        println!();
+
+        instructions = rest
+    }
+
+    println!("\nFinal registers:");
+    for register in [
+        Register::AX,
+        Register::BX,
+        Register::CX,
+        Register::DX,
+        Register::SP,
+        Register::BP,
+        Register::SI,
+        Register::DI,
+    ] {
+        println!("    {register}: {:#.x}", processor.read_register(register));
+    }
+}
+
 // reads instructions on stdin and output disassembled instructions to stdout
 fn decode() {
     let mut input = Vec::new();
@@ -33,6 +85,185 @@ fn decode() {
         let (instruction, rest) = decode_instruction(instructions);
         println!("{}", instruction);
         instructions = rest
+    }
+}
+
+struct Processor {
+    ax: u16,
+    bx: u16,
+    cx: u16,
+    dx: u16,
+    sp: u16,
+    bp: u16,
+    si: u16,
+    di: u16,
+    memory: [u8; 0x10000],
+}
+
+impl Processor {
+    fn new() -> Self {
+        Processor {
+            ax: 0,
+            bx: 0,
+            cx: 0,
+            dx: 0,
+            sp: 0,
+            bp: 0,
+            si: 0,
+            di: 0,
+            memory: [0; 0x10000],
+        }
+    }
+
+    fn execute(&mut self, instruction: Instruction) {
+        match instruction {
+            Instruction::Binary {
+                operation: BinaryOperation::Mov,
+                destination,
+                source,
+                wide,
+            } => {
+                let source_value = match source {
+                    Operand::Immediate(value) => value,
+                    Operand::Location(location) => self.read_location(location),
+                };
+
+                self.write_location(destination, source_value, wide)
+            }
+            _ => unimplemented!(),
+        }
+    }
+
+    fn read_location(&self, location: Location) -> u16 {
+        match location {
+            Location::Register(register) => self.read_register(register),
+            Location::Memory(memory_location) => self.read_memory_location(memory_location),
+        }
+    }
+
+    fn read_memory_location(&self, memory_location: MemoryLocation) -> u16 {
+        self.read_memory_address(self.memory_location_to_address(memory_location))
+    }
+
+    fn memory_location_to_address(&self, memory_location: MemoryLocation) -> u16 {
+        match memory_location {
+            MemoryLocation::Displaced { base, displacement } => {
+                (self.read_displacement_base(base) as i32 + displacement as i32) as u16
+            }
+            MemoryLocation::Direct(address) => address,
+        }
+    }
+
+    fn read_memory_address(&self, address: u16) -> u16 {
+        self.memory[address as usize] as u16
+            | (self.memory.get(address as usize + 1).copied().unwrap_or(0) as u16) << 8
+    }
+
+    fn read_register(&self, register: Register) -> u16 {
+        match register {
+            Register::AL => self.ax & 0xff,
+            Register::CL => self.cx & 0xff,
+            Register::DL => self.dx & 0xff,
+            Register::BL => self.bx & 0xff,
+            Register::AH => self.ax >> 8,
+            Register::CH => self.cx >> 8,
+            Register::DH => self.dx >> 8,
+            Register::BH => self.bx >> 8,
+            Register::AX => self.ax,
+            Register::CX => self.cx,
+            Register::DX => self.dx,
+            Register::BX => self.bx,
+            Register::SP => self.sp,
+            Register::BP => self.bp,
+            Register::SI => self.si,
+            Register::DI => self.di,
+        }
+    }
+
+    fn read_displacement_base(&self, displacement_base: DisplacementBase) -> u16 {
+        match displacement_base {
+            DisplacementBase::Bxsi => self.bx.wrapping_add(self.si),
+            DisplacementBase::Bxdi => self.bx.wrapping_add(self.di),
+            DisplacementBase::Bpsi => self.bp.wrapping_add(self.si),
+            DisplacementBase::Bpdi => self.bp.wrapping_add(self.di),
+            DisplacementBase::Si => self.si,
+            DisplacementBase::Di => self.di,
+            DisplacementBase::Bp => self.bp,
+            DisplacementBase::Bx => self.bx,
+        }
+    }
+
+    fn write_location(&mut self, location: Location, value: u16, wide: bool) {
+        match location {
+            Location::Register(register) => self.write_register(register, value),
+            Location::Memory(memory_location) => {
+                self.write_memory_location(memory_location, value, wide)
+            }
+        }
+    }
+
+    fn write_memory_location(&mut self, memory_location: MemoryLocation, value: u16, wide: bool) {
+        self.write_memory_address(
+            self.memory_location_to_address(memory_location),
+            value,
+            wide,
+        )
+    }
+
+    fn write_memory_address(&mut self, address: u16, value: u16, wide: bool) {
+        let low = value as u8;
+        if wide {
+            let high = (value >> 8) as u8;
+            self.memory[address as usize] = low;
+            self.memory.get_mut(address as usize + 1).map(|m| *m = high);
+        } else {
+            self.memory[address as usize] = low;
+        }
+    }
+
+    fn write_register(&mut self, register: Register, value: u16) {
+        match register {
+            Register::AL => {
+                assert!(value < 0x100);
+                self.ax = self.ax & 0xff00 | value;
+            }
+            Register::CL => {
+                assert!(value < 0x100);
+                self.cx = self.cx & 0xff00 | value;
+            }
+            Register::DL => {
+                assert!(value < 0x100);
+                self.dx = self.dx & 0xff00 | value;
+            }
+            Register::BL => {
+                assert!(value < 0x100);
+                self.bx = self.bx & 0xff00 | value;
+            }
+            Register::AH => {
+                assert!(value < 0x100);
+                self.ax = self.ax & 0xff | value << 8;
+            }
+            Register::CH => {
+                assert!(value < 0x100);
+                self.cx = self.cx & 0xff | value << 8;
+            }
+            Register::DH => {
+                assert!(value < 0x100);
+                self.dx = self.dx & 0xff | value << 8;
+            }
+            Register::BH => {
+                assert!(value < 0x100);
+                self.bx = self.bx & 0xff | value << 8;
+            }
+            Register::AX => self.ax = value,
+            Register::CX => self.cx = value,
+            Register::DX => self.dx = value,
+            Register::BX => self.bx = value,
+            Register::SP => self.sp = value,
+            Register::BP => self.bp = value,
+            Register::SI => self.si = value,
+            Register::DI => self.di = value,
+        }
     }
 }
 
