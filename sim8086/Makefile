@@ -32,7 +32,13 @@ listing_0041_reduced.asm: listing_0041_add_sub_cmp_jnz.asm
 	# can only test these automaticlly because the jump instructions require labels
 	rg -i '^(bits|add|sub|cmp)\b' $< > $@
 
-listing_0039_more_movs.asm listing_0040_challenge_movs.asm listing_0041_add_sub_cmp_jnz.asm listing_0043_immediate_movs.asm:
+listing_0039_more_movs.asm \
+listing_0040_challenge_movs.asm \
+listing_0041_add_sub_cmp_jnz.asm \
+listing_0043_immediate_movs.asm \
+listing_0044_register_movs.asm \
+listing_0045_challenge_register_movs.asm \
+:
 	curl -O https://raw.githubusercontent.com/cmuratori/computer_enhance/refs/heads/main/perfaware/part1/$@
 
 listing_0039_more_movs: listing_0039_more_movs.asm
@@ -45,6 +51,12 @@ listing_0041_add_sub_cmp_jnz: listing_0041_add_sub_cmp_jnz.asm
 	nasm $<
 
 listing_0043_immediate_movs: listing_0043_immediate_movs.asm
+	nasm $<
+
+listing_0044_register_movs: listing_0044_register_movs.asm
+	nasm $<
+
+listing_0045_challenge_register_movs: listing_0045_challenge_register_movs.asm
 	nasm $<
 
 listing_0041_reduced: listing_0041_reduced.asm

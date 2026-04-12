@@ -69,7 +69,7 @@ fn execute() {
         Register::SI,
         Register::DI,
     ] {
-        println!("    {register}: {:#.x}", processor.read_register(register));
+        println!("    {register}: {:#06x} ({0:})", processor.read_register(register));
     }
 }
 
