@@ -1,91 +1,37 @@
 .PHONY: test
-test: listing_0039_reassembled listing_0039_more_movs listing_0040_reassembled listing_0040_challenge_movs listing_0041_reduced_reassembled listing_0041_reduced
-	diff listing_0039_reassembled listing_0039_more_movs
-	diff listing_0040_reassembled listing_0040_challenge_movs
-	diff listing_0041_reduced_reassembled listing_0041_reduced
+test: \
+build/disassembled_listing_0039_more_movs.bin build/listing_0039_more_movs.bin \
+build/disassembled_listing_0040_challenge_movs.bin build/listing_0040_challenge_movs.bin \
+build/disassembled__listing_0041_reduced.bin build/_listing_0041_reduced.bin
+	diff build/disassembled_listing_0039_more_movs.bin build/listing_0039_more_movs.bin
+	diff build/disassembled_listing_0040_challenge_movs.bin build/listing_0040_challenge_movs.bin
+	diff build/disassembled__listing_0041_reduced.bin build/_listing_0041_reduced.bin
 
-listing_0039_disassembled: listing_0039_more_movs build
+build/disassembled_%.asm: build/%.bin target/debug/sim8086 | build
 	target/debug/sim8086 decode < $< > $@
 
-listing_0040_disassembled: listing_0040_challenge_movs build
-	target/debug/sim8086 decode < $< > $@
-
-listing_0041_disassembled: listing_0041_add_sub_cmp_jnz build
-	target/debug/sim8086 decode < $< > $@
-
-listing_0041_reduced_disassembled: listing_0041_reduced build
-	target/debug/sim8086 decode < $< > $@
-
-listing_0039_reassembled: listing_0039_disassembled
-	nasm $< -o $@
-
-listing_0040_reassembled: listing_0040_disassembled
-	nasm $< -o $@
-
-listing_0041_reassembled: listing_0041_disassembled
-	nasm $< -o $@
-
-listing_0041_reduced_reassembled: listing_0041_reduced_disassembled
-	nasm $< -o $@
-
-listing_0041_reduced.asm: listing_0041_add_sub_cmp_jnz.asm
+build/_listing_0041_reduced.asm: build/listing_0041_add_sub_cmp_jnz.asm | build
 	# can only test these automaticlly because the jump instructions require labels
 	rg -i '^(bits|add|sub|cmp)\b' $< > $@
 
-listing_0039_more_movs.asm \
-listing_0040_challenge_movs.asm \
-listing_0041_add_sub_cmp_jnz.asm \
-listing_0043_immediate_movs.asm \
-listing_0044_register_movs.asm \
-listing_0045_challenge_register_movs.asm \
-listing_0046_add_sub_cmp.asm \
-listing_0048_ip_register.asm \
-listing_0049_conditional_jumps.asm \
-listing_0051_memory_mov.asm \
-listing_0052_memory_add_loop.asm \
-listing_0053_add_loop_challenge.asm \
-:
-	curl -O https://raw.githubusercontent.com/cmuratori/computer_enhance/refs/heads/main/perfaware/part1/$@
-
-listing_0039_more_movs: listing_0039_more_movs.asm
-	nasm $<
-
-listing_0040_challenge_movs: listing_0040_challenge_movs.asm
-	nasm $<
-
-listing_0041_add_sub_cmp_jnz: listing_0041_add_sub_cmp_jnz.asm
-	nasm $<
-
-listing_0043_immediate_movs: listing_0043_immediate_movs.asm
-	nasm $<
-
-listing_0044_register_movs: listing_0044_register_movs.asm
-	nasm $<
-
-listing_0045_challenge_register_movs: listing_0045_challenge_register_movs.asm
-	nasm $<
-
-listing_0046_add_sub_cmp: listing_0046_add_sub_cmp.asm
-	nasm $<
-
-listing_0048_ip_register: listing_0048_ip_register.asm
-	nasm $<
-
-listing_0049_conditional_jumps: listing_0049_conditional_jumps.asm
-	nasm $<
-
-listing_0051_memory_mov: listing_0051_memory_mov.asm
-	nasm $<
-
-listing_0052_memory_add_loop: listing_0052_memory_add_loop.asm
-	nasm $<
-
-listing_0053_add_loop_challenge: listing_0053_add_loop_challenge.asm
-	nasm $<
-
-listing_0041_reduced: listing_0041_reduced.asm
-	nasm $<
-
-.PHONY: build
 build:
+	mkdir build
+
+build/listing_%.asm: | build
+	curl https://raw.githubusercontent.com/cmuratori/computer_enhance/refs/heads/main/perfaware/part1/$(notdir $@) -o $@
+
+build/%.bin: build/%.asm | build
+	nasm $< -o $@
+
+.PHONY: target/debug/sim8086
+target/debug/sim8086:
 	cargo build
+
+.PHONY: clean
+clean:
+	rm -rf build
+	cargo clean
+
+.PHONY: execute
+execute: build/$(BIN) target/debug/sim8086
+	target/debug/sim8086 execute < build/$(BIN)
