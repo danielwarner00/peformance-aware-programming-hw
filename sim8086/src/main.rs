@@ -214,6 +214,10 @@ impl Processor {
                     JumpOperation::Js => self.sf,
                     JumpOperation::Jne => !self.zf,
                     JumpOperation::Jns => !self.sf,
+                    JumpOperation::Loop => {
+                        self.cx = self.cx.wrapping_sub(1);
+                        self.cx != 0
+                    },
                     _ => unimplemented!(),
                 } {
                     self.ip = self.ip.wrapping_add(displacement as u16);

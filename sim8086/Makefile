@@ -39,3 +39,7 @@ execute: build/$(BIN) target/debug/sim8086
 .PHONY: build/image.data
 build/image.data: target/debug/sim8086 build/listing_0054_draw_rectangle.bin | build
 	target/debug/sim8086 execute --dump $@ < build/listing_0054_draw_rectangle.bin
+
+.PHONY: build/challenge_image.data
+build/challenge_image.data: target/debug/sim8086 build/listing_0055_challenge_rectangle.bin | build
+	target/debug/sim8086 execute --dump $@ < build/listing_0055_challenge_rectangle.bin
