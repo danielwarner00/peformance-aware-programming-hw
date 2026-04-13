@@ -320,7 +320,9 @@ impl Processor {
         if wide {
             let high = (value >> 8) as u8;
             self.memory[address as usize] = low;
-            self.memory.get_mut(address as usize + 1).map(|m| *m = high);
+            if let Some(byte) = self.memory.get_mut(address as usize + 1) {
+                *byte = high;
+            }
         } else {
             self.memory[address as usize] = low;
         }
@@ -941,7 +943,7 @@ fn decode_immediate_to_register_memory_instruction(
             source: Operand::Immediate(immediate),
             wide: w,
         },
-        (data_start_index + data_size) as u16,
+        data_start_index + data_size,
     )
 }
 
