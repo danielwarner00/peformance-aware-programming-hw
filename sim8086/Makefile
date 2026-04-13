@@ -17,6 +17,7 @@ build/_listing_0041_reduced.asm: build/listing_0041_add_sub_cmp_jnz.asm | build
 build:
 	mkdir build
 
+.NOTINTERMEDIATE: build/listing_%.asm
 build/listing_%.asm: | build
 	curl https://raw.githubusercontent.com/cmuratori/computer_enhance/refs/heads/main/perfaware/part1/$(notdir $@) -o $@
 
@@ -35,6 +36,10 @@ clean:
 .PHONY: execute
 execute: build/$(BIN) target/debug/sim8086
 	target/debug/sim8086 execute < build/$(BIN)
+
+.PHONY: estimate
+estimate: build/$(BIN) target/debug/sim8086
+	target/debug/sim8086 execute --estimate < build/$(BIN)
 
 .PHONY: build/image.data
 build/image.data: target/debug/sim8086 build/listing_0054_draw_rectangle.bin | build

@@ -1,39 +1,46 @@
+use clap::Parser;
+
 use std::fmt;
 use std::fmt::Display;
 use std::io::Read;
 use std::process::ExitCode;
 
+#[derive(Parser)]
+enum Args {
+    Decode,
+    Execute {
+        #[arg(long)]
+        dump: Option<String>,
+
+        #[arg(long)]
+        estimate: bool,
+    },
+}
+
 fn main() -> ExitCode {
-    let mut args = std::env::args();
-    let command = args.nth(1);
-    match command.as_deref() {
-        Some("execute") => {
-            let processor = execute();
-            if let Some("--dump") = args.next().as_deref() {
-                let path = args.next().unwrap();
+    let args = Args::parse();
+
+    match args {
+        Args::Execute { dump, estimate } => {
+            let processor = execute(estimate);
+            if let Some(path) = dump {
                 std::fs::write(path, processor.memory).unwrap();
             }
             ExitCode::SUCCESS
         }
-        Some("decode") => {
+        Args::Decode => {
             decode();
             ExitCode::SUCCESS
-        }
-        Some(_) => {
-            eprintln!("no such command");
-            ExitCode::FAILURE
-        }
-        None => {
-            eprintln!("no command provided");
-            ExitCode::FAILURE
         }
     }
 }
 
-fn execute() -> Box<Processor> {
+fn execute(estimate: bool) -> Box<Processor> {
     let mut input = Vec::new();
     std::io::stdin().read_to_end(&mut input).unwrap();
     let instructions = input.as_slice();
+
+    let mut clocks: u32 = 0;
 
     let mut processor = Box::new(Processor::new());
 
@@ -60,36 +67,42 @@ fn execute() -> Box<Processor> {
 
         print!("{};", instruction);
 
-        if let Instruction::Binary {
-            destination: Location::Register(register),
-            ..
-        } = instruction
-        {
-            let before = before.unwrap();
-            let after = processor.read_register(register);
-            print!(" {register}:{before:#x}->{after:#x}");
-        };
+        if estimate {
+            let instruction_clocks = instruction.clocks();
+            clocks += instruction_clocks;
+            print!(" clocks: {instruction_clocks:+} = {clocks}");
+        } else {
+            if let Instruction::Binary {
+                destination: Location::Register(register),
+                ..
+            } = instruction
+            {
+                let before = before.unwrap();
+                let after = processor.read_register(register);
+                print!(" {register}:{before:#x}->{after:#x}");
+            };
 
-        print!(" ip:{ip_before:#x}->{:#x}", processor.ip);
+            print!(" ip:{ip_before:#x}->{:#x}", processor.ip);
 
-        if let Instruction::Binary {
-            operation: BinaryOperation::Add | BinaryOperation::Sub | BinaryOperation::Cmp,
-            ..
-        } = instruction
-        {
-            print!(" flags:");
-            if sf_before {
-                print!("S");
-            }
-            if zf_before {
-                print!("Z");
-            }
-            print!("->");
-            if processor.sf {
-                print!("S");
-            }
-            if processor.zf {
-                print!("Z");
+            if let Instruction::Binary {
+                operation: BinaryOperation::Add | BinaryOperation::Sub | BinaryOperation::Cmp,
+                ..
+            } = instruction
+            {
+                print!(" flags:");
+                if sf_before {
+                    print!("S");
+                }
+                if zf_before {
+                    print!("Z");
+                }
+                print!("->");
+                if processor.sf {
+                    print!("S");
+                }
+                if processor.zf {
+                    print!("Z");
+                }
             }
         }
 
@@ -217,7 +230,7 @@ impl Processor {
                     JumpOperation::Loop => {
                         self.cx = self.cx.wrapping_sub(1);
                         self.cx != 0
-                    },
+                    }
                     _ => unimplemented!(),
                 } {
                     self.ip = self.ip.wrapping_add(displacement as u16);
@@ -412,6 +425,40 @@ enum MemoryLocation {
         displacement: i16,
     },
     Direct(u16),
+}
+
+impl MemoryLocation {
+    fn effective_address_clocks(&self) -> u32 {
+        match self {
+            MemoryLocation::Direct(_) => 6,
+            MemoryLocation::Displaced { base, displacement } => match base {
+                DisplacementBase::Si
+                | DisplacementBase::Di
+                | DisplacementBase::Bp
+                | DisplacementBase::Bx => {
+                    if *displacement == 0 {
+                        5
+                    } else {
+                        9
+                    }
+                }
+                DisplacementBase::Bxsi | DisplacementBase::Bpdi => {
+                    if *displacement == 0 {
+                        7
+                    } else {
+                        11
+                    }
+                }
+                DisplacementBase::Bpsi | DisplacementBase::Bxdi => {
+                    if *displacement == 0 {
+                        8
+                    } else {
+                        12
+                    }
+                }
+            },
+        }
+    }
 }
 
 impl Display for MemoryLocation {
@@ -660,6 +707,64 @@ enum Instruction {
         operation: JumpOperation,
         displacement: i8,
     },
+}
+
+impl Instruction {
+    fn clocks(&self) -> u32 {
+        match self {
+            Instruction::Binary {
+                operation: BinaryOperation::Mov,
+                destination,
+                source,
+                ..
+            } => match (destination, source) {
+                (
+                    Location::Memory(_),
+                    Operand::Location(Location::Register(
+                        Register::AX | Register::AL | Register::AH,
+                    )),
+                ) => 10,
+                (
+                    Location::Register(Register::AX | Register::AL | Register::AH),
+                    Operand::Location(Location::Memory(_)),
+                ) => 10,
+                (Location::Register(_), Operand::Location(Location::Register(_))) => 2,
+                (Location::Register(_), Operand::Location(Location::Memory(memory_location))) => {
+                    8 + memory_location.effective_address_clocks()
+                }
+                (Location::Memory(memory_location), Operand::Location(Location::Register(_))) => {
+                    9 + memory_location.effective_address_clocks()
+                }
+                (Location::Register(_), Operand::Immediate(_)) => 4,
+                (Location::Memory(memory_location), Operand::Immediate(_)) => {
+                    10 + memory_location.effective_address_clocks()
+                }
+                _ => unimplemented!(),
+            },
+            Instruction::Binary {
+                operation: BinaryOperation::Add,
+                destination,
+                source,
+                ..
+            } => match (destination, source) {
+                (Location::Register(_), Operand::Location(Location::Register(_))) => 3,
+                (Location::Register(_), Operand::Location(Location::Memory(memory_location))) => {
+                    9 + memory_location.effective_address_clocks()
+                }
+                (Location::Memory(memory_location), Operand::Location(Location::Register(_))) => {
+                    16 + memory_location.effective_address_clocks()
+                }
+                (Location::Register(_), Operand::Immediate(_)) => 4,
+                (Location::Memory(memory_location), Operand::Immediate(_)) => {
+                    17 + memory_location.effective_address_clocks()
+                }
+                _ => panic!("got invalid add instruction when computing clocks"),
+            },
+            _ => {
+                unimplemented!("{self}")
+            }
+        }
+    }
 }
 
 impl Display for Instruction {
