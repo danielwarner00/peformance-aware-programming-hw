@@ -1,12 +1,12 @@
 use clap::Parser;
-use rand;
+use rand::SeedableRng;
 
 #[derive(Parser)]
 struct Args {
     count: u32,
-    // TODO add
-    // #[arg(long, default_value_t = 0)]
-    // seed: i32,
+
+    #[arg(long, default_value_t = 0)]
+    seed: u64,
 }
 
 fn main() {
@@ -15,17 +15,19 @@ fn main() {
     print!("{{\"pairs\":[");
     let mut first = true;
     let mut haversine_sum = 0.0;
+    let mut rng = rand::rngs::StdRng::seed_from_u64(args.seed);
+
     for _ in 0..args.count {
-        fn generate_lat() -> f64 {
-            (rand::random::<f64>() * 2.0 - 1.0).asin().to_degrees() // the argument to asin will never be NaN
+        fn generate_lat(mut rng: impl rand::RngExt) -> f64 {
+            (rng.random::<f64>() * 2.0 - 1.0).asin().to_degrees() // the argument to asin will never be NaN
         }
-        fn generate_long() -> f64 {
-            (rand::random::<f64>() - 0.5) * 360.0
+        fn generate_long(mut rng: impl rand::RngExt) -> f64 {
+            (rng.random::<f64>() - 0.5) * 360.0
         }
-        let lat0 = generate_lat();
-        let long0 = generate_long();
-        let lat1 = generate_lat();
-        let long1 = generate_long();
+        let lat0 = generate_lat(&mut rng);
+        let long0 = generate_long(&mut rng);
+        let lat1 = generate_lat(&mut rng);
+        let long1 = generate_long(&mut rng);
 
         haversine_sum += haversine_of_degrees(lat0, long0, lat1, long1, 6371.0);
 
