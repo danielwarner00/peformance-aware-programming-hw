@@ -38,7 +38,7 @@ fn main() {
 
         first = false;
     }
-    let average = {haversine_sum / args.count as f64 };
+    let average = haversine_sum / args.count as f64;
     // also output the sum and average for verifying computations
     print!(r#"],"sum":{haversine_sum},"average":{average}}}"#);
 }
@@ -51,5 +51,5 @@ fn haversine_of_degrees(lat0: f64, long0: f64, lat1: f64, long1: f64, radius: f6
     let y1 = lat1.to_radians();
 
     let root_term = (d_y / 2.0).sin().powi(2) + y0.cos() * y1.cos() * (d_x / 2.0).sin().powi(2);
-    2.0 * radius * root_term.sqrt().asin()
+    2.0 * root_term.sqrt().asin() * radius
 }
