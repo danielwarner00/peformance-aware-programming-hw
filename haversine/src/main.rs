@@ -1,13 +1,22 @@
+use perf_tools::rdtsc;
 use std::io::Read;
 
 fn main() -> Result<(), &'static str> {
+    let rdtsc_to_millis = |rdtsc| perf_tools::rdtsc_to_millis(3.60e9, rdtsc);
+
+    let start = rdtsc();
     let mut input_buffer = Vec::new();
     std::io::stdin()
         .lock()
         .read_to_end(&mut input_buffer)
         .unwrap();
-    let input = parse_input(&input_buffer).ok_or("could not parse input")?;
+    let read_input_ms = rdtsc_to_millis(rdtsc() - start);
 
+    let start = rdtsc();
+    let input = parse_input(&input_buffer).ok_or("could not parse input")?;
+    let parse_input_ms = rdtsc_to_millis(rdtsc() - start);
+
+    let start = rdtsc();
     let mut haversine_count = 0usize;
     let sum: f64 = input
         .pairs
@@ -17,6 +26,9 @@ fn main() -> Result<(), &'static str> {
             haversine_of_degrees(pair.lat0, pair.long0, pair.lat1, pair.long1, 6371.0)
         })
         .sum();
+    let compute_haversines_ms = rdtsc_to_millis(rdtsc() - start);
+
+    let start = rdtsc();
     println!("computed {haversine_count} haversines");
     println!(
         "got sum: {sum}, expected sum: {}, difference: {}",
@@ -29,6 +41,15 @@ fn main() -> Result<(), &'static str> {
         input.average,
         average - input.average
     );
+    let write_output_ms = rdtsc_to_millis(rdtsc() - start);
+
+    println!("time to read input: {:.0} ms", read_input_ms);
+    println!("time to parse input: {:.0} ms", parse_input_ms);
+    println!(
+        "time to compute haversines: {:.0} ms",
+        compute_haversines_ms
+    );
+    println!("time to write output: {:.0} ms", write_output_ms);
 
     Ok(())
 }
