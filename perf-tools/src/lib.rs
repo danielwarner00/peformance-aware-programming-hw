@@ -1,6 +1,9 @@
 use std::arch::asm;
 use std::time::Duration;
 
+// this would have to be updated to work for others cpus but this works for now
+const RDTSC_FREQUENCY: f64 = 3.6e9;
+
 pub fn rdtsc() -> u64 {
     let lower: u32;
     let upper: u32;
@@ -16,8 +19,8 @@ pub fn rdtsc() -> u64 {
     (upper as u64) << 32 | lower as u64
 }
 
-pub fn rdtsc_to_millis(frequency: f64, rdtsc: u64) -> f64 {
-    rdtsc as f64 / frequency * 1000f64
+pub fn rdtsc_to_millis(rdtsc: u64) -> f64 {
+    rdtsc as f64 / RDTSC_FREQUENCY * 1000f64
 }
 
 // TODO this only handles positive times, handle

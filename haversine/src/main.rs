@@ -1,9 +1,8 @@
 use perf_tools::rdtsc;
+use perf_tools::rdtsc_to_millis;
 use std::io::Read;
 
 fn main() -> Result<(), &'static str> {
-    let rdtsc_to_millis = |rdtsc| perf_tools::rdtsc_to_millis(3.60e9, rdtsc);
-
     let start = rdtsc();
     let mut input_buffer = Vec::new();
     std::io::stdin()
