@@ -1,5 +1,6 @@
 use perf_tools::rdtsc;
 use perf_tools::rdtsc_to_millis;
+use perf_tools::profile;
 use std::io::Read;
 
 fn main() -> Result<(), &'static str> {
@@ -108,6 +109,7 @@ fn parse_input_test() {
 }
 
 fn parse_input(input: &[u8]) -> Option<Input> {
+    profile!("parse_input");
     let mut pairs = None;
     let mut sum = None;
     let mut average = None;
@@ -209,6 +211,7 @@ fn parse_pair_test() {
 }
 
 fn parse_pair(input: &[u8]) -> Option<(Pair, &[u8])> {
+    profile!("parse_pair");
     let mut lat0 = None;
     let mut long0 = None;
     let mut lat1 = None;
@@ -308,6 +311,7 @@ fn parse_f64_test() {
 }
 
 fn parse_f64(mut input: &[u8]) -> Option<(f64, &[u8])> {
+    profile!("parse_f64");
     // TODO support negative
     let mut result = 0.0;
     let mut got_digit = false;
@@ -352,6 +356,7 @@ fn parse_f64(mut input: &[u8]) -> Option<(f64, &[u8])> {
 }
 
 fn parse_key(input: &[u8]) -> Option<(&[u8], &[u8])> {
+    profile!("parse_key");
     let (key, rest) = parse_string(input)?;
     let rest = parse_byte(rest, b':')?;
     Some((key, rest))
@@ -371,6 +376,7 @@ fn test_parse_string() {
 
 // does not support escape sequences
 fn parse_string(input: &[u8]) -> Option<(&[u8], &[u8])> {
+    profile!("parse_string");
     let mut rest = parse_byte(input, b'\"')?;
 
     let mut split = rest.splitn(2, |c| *c == b'\"');

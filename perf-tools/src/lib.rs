@@ -120,6 +120,7 @@ impl Drop for ProfilingSection {
     }
 }
 
+// does not support reentrant code
 #[macro_export]
 macro_rules! profile {
     ($name:expr) => {
