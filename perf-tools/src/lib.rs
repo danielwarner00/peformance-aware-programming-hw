@@ -4,7 +4,7 @@ use std::thread::LocalKey;
 use std::time::Duration;
 
 // this would have to be updated to work for others cpus but this works for now
-const RDTSC_FREQUENCY: f64 = 3.6e9;
+const RDTSC_FREQUENCY: f64 = 4.7e9;
 
 pub fn rdtsc() -> u64 {
     let lower: u32;
