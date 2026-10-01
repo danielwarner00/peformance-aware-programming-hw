@@ -129,17 +129,17 @@ impl Drop for ProfilingSection {
 #[macro_export]
 macro_rules! profile {
     ($name:expr) => {
-        thread_local! {
-            static _COUNTER: $crate::Counter = const { $crate::Counter { counter: std::cell::Cell::new(0), name: $name, in_section: std::cell::Cell::new(false) } };
-        }
-        let mut ignoring = false;
-        _COUNTER.with(|counter| {
-            ignoring = counter.in_section.get();
-        });
-        let _profiling_section = $crate::ProfilingSection::new(&_COUNTER, ignoring);
-        _COUNTER.with(|counter| {
-            counter.in_section.set(true);
-        });
+        let _ = {
+            thread_local! {
+                static COUNTER: $crate::Counter = const { $crate::Counter { counter: std::cell::Cell::new(0), name: $name, in_section: std::cell::Cell::new(false) } };
+            }
+            let mut ignoring = false;
+            COUNTER.with(|counter| {
+                ignoring = counter.in_section.get();
+                counter.in_section.set(true);
+            });
+            &$crate::ProfilingSection::new(&COUNTER, ignoring)
+        };
     }
 }
 
