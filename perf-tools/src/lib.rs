@@ -83,7 +83,7 @@ impl std::fmt::Display for Rdtsc {
         } else {
             std::cmp::min(2, (floor as i32 - 2) as usize)
         };
-        writeln!(
+        write!(
             f,
             "{:.decimal_places$} {unit}",
             to_significant_figures(number)
