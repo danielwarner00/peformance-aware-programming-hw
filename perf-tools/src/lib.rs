@@ -77,7 +77,12 @@ impl std::fmt::Display for Rdtsc {
             (seconds, "s")
         };
         number = to_significant_figures(number);
-        let decimal_places = std::cmp::min(2, (number.log10().floor() as i32 - 2) as usize);
+        let floor = number.log10().floor();
+        let decimal_places = if floor == f64::NEG_INFINITY {
+            1
+        } else {
+            std::cmp::min(2, (floor as i32 - 2) as usize)
+        };
         writeln!(
             f,
             "{:.decimal_places$} {unit}",
