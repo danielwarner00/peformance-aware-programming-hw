@@ -1,6 +1,6 @@
+use perf_tools::profile;
 use perf_tools::rdtsc;
 use perf_tools::rdtsc_to_millis;
-use perf_tools::profile;
 use std::io::Read;
 
 fn main() -> Result<(), &'static str> {

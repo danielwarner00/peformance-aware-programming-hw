@@ -1,6 +1,10 @@
+use dtor::dtor;
+// currently, users of this crate must have linkme as a direct dependency, TODO figure out how to
+// remove that requirement
+pub use linkme::distributed_slice;
 use std::arch::asm;
-use std::cell::Cell;
-use std::thread::LocalKey;
+use std::cell::RefCell;
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::time::Duration;
 
 // this would have to be updated to work for others cpus but this works for now
@@ -92,42 +96,141 @@ impl std::fmt::Display for Rdtsc {
 }
 
 pub struct Counter {
-    pub counter: Cell<u64>,
+    pub root_counter: AtomicU64,
+    pub leaf_counter: AtomicU64,
     pub name: &'static str,
-    pub in_section: Cell<bool>,
+    pub in_counter: AtomicBool, // TODO this field is why the current implementation doesn't quite
+                                // work with multiple threads; really this field should be a thread local or I need to do
+                                // something else to determine whether a thread is alredy in a counter when pushing it to the
+                                // stack
 }
 
-impl Drop for Counter {
-    fn drop(&mut self) {
-        eprint!("got {} time: {}", self.name, Rdtsc(self.counter.get()));
+struct CounterStack {
+    stack: [Option<CounterStackEntry>; 4096],
+    index: usize,
+}
+
+#[derive(Clone, Copy)]
+struct CounterStackEntry {
+    counter: &'static Counter,
+    leaf_start: u64, // time that this entry most recently became the leaf, either because this
+    // entry started or the previous leaf ended
+    root_start: Option<u64>, // only Some if the this entry is the first entry of this Counter on the stack, in which case the value is the time that it started
+}
+
+impl CounterStack {
+    fn push(&mut self, entry: CounterStackEntry) {
+        self.stack[self.index] = Some(entry);
+
+        self.index += 1;
     }
-}
 
-pub struct ProfilingSection {
-    start: u64,
-    counter: &'static LocalKey<Counter>, // TODO figure out how I can remove this reference, check
-    ignoring: bool,
-}
+    fn pop(&mut self) -> Option<CounterStackEntry> {
+        if self.index == 0 {
+            None
+        } else {
+            self.index -= 1;
+            Some(self.stack[self.index].unwrap())
+        }
+    }
 
-impl ProfilingSection {
-    pub fn new(counter: &'static LocalKey<Counter>, ignoring: bool) -> ProfilingSection {
-        ProfilingSection {
-            start: rdtsc(),
-            counter,
-            ignoring,
+    fn peek(&self) -> Option<&CounterStackEntry> {
+        if self.index == 0 {
+            None
+        } else {
+            self.stack[self.index - 1].as_ref()
+        }
+    }
+
+    fn peek_mut(&mut self) -> Option<&mut CounterStackEntry> {
+        if self.index == 0 {
+            None
+        } else {
+            self.stack[self.index - 1].as_mut()
         }
     }
 }
+
+#[distributed_slice]
+pub static COUNTERS: [Counter];
+
+thread_local! {
+    static COUNTER_STACK: RefCell<CounterStack> = const { RefCell::new(CounterStack {
+        stack: [None; _],
+        index: 0,
+    })};
+}
+
+// start a new counter, replacing the current counter as the leaf
+pub fn start_counter(counter: &'static Counter) {
+    let now = rdtsc();
+
+    COUNTER_STACK.with_borrow(|counter_stack| {
+        if let Some(CounterStackEntry {
+            counter: current_counter,
+            leaf_start,
+            ..
+        }) = counter_stack.peek()
+        {
+            current_counter
+                .leaf_counter
+                .fetch_add(now - leaf_start, Ordering::Relaxed);
+        }
+    });
+
+    push_counter(CounterStackEntry {
+        counter,
+        leaf_start: now,
+        root_start: if counter.in_counter.load(Ordering::Relaxed) {
+            None
+        } else {
+            Some(now)
+        },
+    });
+    counter.in_counter.store(true, Ordering::Relaxed);
+}
+
+// end the current counter, making the previous counter the leaf
+fn end_counter() {
+    let now = rdtsc();
+
+    let CounterStackEntry {
+        counter: current_counter,
+        leaf_start,
+        root_start,
+    } = pop_counter().expect("no current counter");
+    let duration = now - leaf_start;
+    current_counter
+        .leaf_counter
+        .fetch_add(duration, Ordering::Relaxed);
+    if let Some(root_start) = root_start {
+        let duration = now - root_start;
+        current_counter
+            .root_counter
+            .fetch_add(duration, Ordering::Relaxed);
+        current_counter.in_counter.store(false, Ordering::Relaxed);
+    }
+
+    COUNTER_STACK.with_borrow_mut(|counter_stack| {
+        if let Some(entry) = counter_stack.peek_mut() {
+            entry.leaf_start = now;
+        }
+    })
+}
+
+fn push_counter(entry: CounterStackEntry) {
+    COUNTER_STACK.with_borrow_mut(|stack| stack.push(entry));
+}
+
+fn pop_counter() -> Option<CounterStackEntry> {
+    COUNTER_STACK.with_borrow_mut(|stack| stack.pop())
+}
+
+pub struct ProfilingSection;
 
 impl Drop for ProfilingSection {
     fn drop(&mut self) {
-        if !self.ignoring {
-            let duration = rdtsc() - self.start;
-            self.counter.with(|counter| {
-                counter.counter.set(counter.counter.get() + duration);
-                counter.in_section.set(false);
-            });
-        }
+        end_counter();
     }
 }
 
@@ -135,22 +238,52 @@ impl Drop for ProfilingSection {
 macro_rules! profile {
     ($name:expr) => {
         let _ = {
-            thread_local! {
-                static COUNTER: $crate::Counter = const { $crate::Counter { counter: std::cell::Cell::new(0), name: $name, in_section: std::cell::Cell::new(false) } };
-            }
-            let mut ignoring = false;
-            COUNTER.with(|counter| {
-                ignoring = counter.in_section.get();
-                counter.in_section.set(true);
-            });
-            &$crate::ProfilingSection::new(&COUNTER, ignoring)
+            #[$crate::distributed_slice($crate::COUNTERS)]
+            static COUNTER: $crate::Counter = const {
+                $crate::Counter {
+                    root_counter: std::sync::atomic::AtomicU64::new(0),
+                    leaf_counter: std::sync::atomic::AtomicU64::new(0),
+                    name: $name,
+                    in_counter: std::sync::atomic::AtomicBool::new(false),
+                }
+            };
+
+            $crate::start_counter(&COUNTER);
+            &$crate::ProfilingSection
         };
-    }
+    };
+}
+
+#[macro_export]
+macro_rules! declare_counters {
+    () => {
+        #[$crate::gather]
+        static COUNTERS: ScatteredSlice<&'static Counter>;
+    };
 }
 
 #[test]
 fn test_profile() {
     profile!("hello");
+}
+
+fn print_counters() {
+    for Counter {
+        name,
+        leaf_counter,
+        root_counter,
+        ..
+    } in &*COUNTERS
+    {
+        let leaf_time = Rdtsc(leaf_counter.load(Ordering::Relaxed));
+        let root_time = Rdtsc(root_counter.load(Ordering::Relaxed));
+        println!("For counter {name} got root time {root_time} and leaf time {leaf_time}");
+    }
+}
+
+#[dtor(unsafe)]
+fn dtor() {
+    print_counters();
 }
 
 /*

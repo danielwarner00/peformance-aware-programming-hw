@@ -1,7 +1,7 @@
 use perf_tools::profile;
 
 fn main() {
-    println!("finished with {}", recurse(10_000));
+    println!("finished with {}", recurse(100));
 }
 
 fn recurse(remaining: u32) -> u32 {

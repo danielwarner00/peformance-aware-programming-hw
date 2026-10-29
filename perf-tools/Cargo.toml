@@ -4,7 +4,10 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
+dtor = "1.0.6"
 libc = "0.2.186"
+libc-print = "0.5.0"
+linkme = "0.3.37"
 
 [profile.release-debug]
 inherits = "release"
