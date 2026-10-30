@@ -2,7 +2,6 @@ use dtor::dtor;
 // currently, users of this crate must have linkme as a direct dependency, TODO figure out how to
 // remove that requirement
 pub use linkme::distributed_slice;
-use std::arch::asm;
 use std::cell::RefCell;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::time::Duration;
@@ -11,18 +10,9 @@ use std::time::Duration;
 const RDTSC_FREQUENCY: f64 = 4.7e9;
 
 pub fn rdtsc() -> u64 {
-    let lower: u32;
-    let upper: u32;
     unsafe {
-        asm!(
-            "rdtsc",
-            out("eax") lower,
-            out("edx") upper,
-            options(nomem, preserves_flags),
-        );
+        std::arch::x86_64::_rdtsc()
     }
-
-    (upper as u64) << 32 | lower as u64
 }
 
 pub fn rdtsc_to_millis(rdtsc: u64) -> f64 {
