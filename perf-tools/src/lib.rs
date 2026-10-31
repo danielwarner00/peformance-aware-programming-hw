@@ -1,3 +1,4 @@
+#[cfg(feature = "profile")]
 use dtor::dtor;
 // currently, users of this crate must have linkme as a direct dependency, TODO figure out how to
 // remove that requirement
@@ -37,8 +38,10 @@ pub fn gettime(clockid: libc::clockid_t) -> Result<Duration, ()> {
     }
 }
 
+#[cfg(feature = "profile")]
 struct Rdtsc(u64);
 
+#[cfg(feature = "profile")]
 #[test]
 fn test_to_significant_figures() {
     assert_eq!(to_significant_figures(1234f64), 1230f64);
@@ -47,6 +50,7 @@ fn test_to_significant_figures() {
 }
 
 // rounds to three significant figures
+#[cfg(feature = "profile")]
 fn to_significant_figures(value: f64) -> f64 {
     let mut power = value.log10();
     if power == f64::NEG_INFINITY {
@@ -58,6 +62,7 @@ fn to_significant_figures(value: f64) -> f64 {
     (value / divisor).round() * divisor
 }
 
+#[cfg(feature = "profile")]
 impl std::fmt::Display for Rdtsc {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> Result<(), std::fmt::Error> {
         let seconds = self.0 as f64 / RDTSC_FREQUENCY;
@@ -224,6 +229,7 @@ impl Drop for ProfilingSection {
     }
 }
 
+#[cfg(feature = "profile")]
 #[macro_export]
 macro_rules! profile {
     ($name:expr) => {
@@ -244,6 +250,12 @@ macro_rules! profile {
     };
 }
 
+#[cfg(not(feature = "profile"))]
+#[macro_export]
+macro_rules! profile {
+    ($name:expr) => {}
+}
+
 #[macro_export]
 macro_rules! declare_counters {
     () => {
@@ -257,6 +269,7 @@ fn test_profile() {
     profile!("hello");
 }
 
+#[cfg(feature = "profile")]
 fn print_counters() {
     for Counter {
         name,
@@ -271,6 +284,7 @@ fn print_counters() {
     }
 }
 
+#[cfg(feature = "profile")]
 #[dtor(unsafe)]
 fn dtor() {
     print_counters();

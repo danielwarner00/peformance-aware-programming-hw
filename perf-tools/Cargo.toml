@@ -9,6 +9,9 @@ libc = "0.2.186"
 libc-print = "0.5.0"
 linkme = "0.3.37"
 
+[features]
+profile = []
+
 [profile.release-debug]
 inherits = "release"
 debug = true
