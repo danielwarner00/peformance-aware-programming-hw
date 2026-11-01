@@ -2,23 +2,32 @@ use perf_tools::profile;
 use std::io::Read;
 
 fn main() -> Result<(), &'static str> {
+    profile!("main");
     let mut input_buffer = Vec::new();
-    std::io::stdin()
-        .lock()
-        .read_to_end(&mut input_buffer)
-        .unwrap();
+
+    {
+        profile!("read input");
+        std::io::stdin()
+            .lock()
+            .read_to_end(&mut input_buffer)
+            .unwrap();
+    }
 
     let input = parse_input(&input_buffer).ok_or("could not parse input")?;
 
     let mut haversine_count = 0usize;
-    let sum: f64 = input
-        .pairs
-        .iter()
-        .map(|pair| {
-            haversine_count += 1;
-            haversine_of_degrees(pair.lat0, pair.long0, pair.lat1, pair.long1, 6371.0)
-        })
-        .sum();
+    let sum: f64;
+    {
+        profile!("compute haversines");
+        sum = input
+            .pairs
+            .iter()
+            .map(|pair| {
+                haversine_count += 1;
+                haversine_of_degrees(pair.lat0, pair.long0, pair.lat1, pair.long1, 6371.0)
+            })
+            .sum();
+    }
 
     println!("computed {haversine_count} haversines");
     println!(
@@ -193,7 +202,6 @@ fn parse_pair_test() {
 }
 
 fn parse_pair(input: &[u8]) -> Option<(Pair, &[u8])> {
-    profile!("parse_pair");
     let mut lat0 = None;
     let mut long0 = None;
     let mut lat1 = None;
@@ -293,7 +301,6 @@ fn parse_f64_test() {
 }
 
 fn parse_f64(mut input: &[u8]) -> Option<(f64, &[u8])> {
-    profile!("parse_f64");
     // TODO support negative
     let mut result = 0.0;
     let mut got_digit = false;
@@ -338,7 +345,6 @@ fn parse_f64(mut input: &[u8]) -> Option<(f64, &[u8])> {
 }
 
 fn parse_key(input: &[u8]) -> Option<(&[u8], &[u8])> {
-    profile!("parse_key");
     let (key, rest) = parse_string(input)?;
     let rest = parse_byte(rest, b':')?;
     Some((key, rest))
@@ -358,7 +364,6 @@ fn test_parse_string() {
 
 // does not support escape sequences
 fn parse_string(input: &[u8]) -> Option<(&[u8], &[u8])> {
-    profile!("parse_string");
     let mut rest = parse_byte(input, b'\"')?;
 
     let mut split = rest.splitn(2, |c| *c == b'\"');
