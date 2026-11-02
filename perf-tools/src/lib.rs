@@ -98,6 +98,7 @@ pub struct Counter {
                                 // work with multiple threads; really this field should be a thread local or I need to do
                                 // something else to determine whether a thread is alredy in a counter when pushing it to the
                                 // stack
+    pub hits: AtomicU64,
 }
 
 struct CounterStack {
@@ -183,6 +184,7 @@ pub fn start_counter(counter: &'static Counter) {
         },
     });
     counter.in_counter.store(true, Ordering::Relaxed);
+    counter.hits.fetch_add(1, Ordering::Relaxed);
 }
 
 // end the current counter, making the previous counter the leaf
@@ -241,6 +243,7 @@ macro_rules! profile {
                     leaf_counter: std::sync::atomic::AtomicU64::new(0),
                     name: $name,
                     in_counter: std::sync::atomic::AtomicBool::new(false),
+                    hits: std::sync::atomic::AtomicU64::new(0),
                 }
             };
 
@@ -275,12 +278,19 @@ fn print_counters() {
         name,
         leaf_counter,
         root_counter,
+        hits,
         ..
     } in &*COUNTERS
     {
         let leaf_time = Rdtsc(leaf_counter.load(Ordering::Relaxed));
         let root_time = Rdtsc(root_counter.load(Ordering::Relaxed));
-        println!("For counter {name} got root time {root_time} and leaf time {leaf_time}");
+        let hits = hits.load(Ordering::Relaxed);
+        let s = if hits == 1 {
+            ""
+        } else {
+            "s"
+        };
+        println!("For counter \"{name}\" with {hits} hit{s} got root time {root_time}, leaf time {leaf_time}");
     }
 }
 
