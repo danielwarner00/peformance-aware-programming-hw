@@ -65,17 +65,8 @@ fn to_significant_figures(value: f64) -> f64 {
 #[cfg(feature = "profile")]
 impl std::fmt::Display for Rdtsc {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> Result<(), std::fmt::Error> {
-        let seconds = self.0 as f64 / RDTSC_FREQUENCY;
-        let (mut number, unit) = if seconds < 1e-6f64 {
-            (seconds * 1e9f64, "ns")
-        } else if seconds < 1e-3 {
-            (seconds * 1e6f64, "μs")
-        } else if seconds < 1f64 {
-            (seconds * 1000f64, "ms")
-        } else {
-            (seconds, "s")
-        };
-        number = to_significant_figures(number);
+        let milliseconds = (self.0 as f64 / RDTSC_FREQUENCY) * 1000f64;
+        let number = to_significant_figures(milliseconds);
         let floor = number.log10().floor();
         let decimal_places = if floor == f64::NEG_INFINITY {
             1
@@ -84,7 +75,7 @@ impl std::fmt::Display for Rdtsc {
         };
         write!(
             f,
-            "{:.decimal_places$} {unit}",
+            "{:.decimal_places$} ms",
             to_significant_figures(number)
         )
     }
