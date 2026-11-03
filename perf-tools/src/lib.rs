@@ -11,9 +11,7 @@ use std::time::Duration;
 const RDTSC_FREQUENCY: f64 = 4.7e9;
 
 pub fn rdtsc() -> u64 {
-    unsafe {
-        std::arch::x86_64::_rdtsc()
-    }
+    unsafe { std::arch::x86_64::_rdtsc() }
 }
 
 pub fn rdtsc_to_millis(rdtsc: u64) -> f64 {
@@ -73,11 +71,7 @@ impl std::fmt::Display for Rdtsc {
         } else {
             std::cmp::min(2, (floor as i32 - 2) as usize)
         };
-        write!(
-            f,
-            "{:.decimal_places$} ms",
-            to_significant_figures(number)
-        )
+        write!(f, "{:.decimal_places$} ms", to_significant_figures(number))
     }
 }
 
@@ -86,10 +80,11 @@ pub struct Counter {
     pub leaf_counter: AtomicU64,
     pub name: &'static str,
     pub in_counter: AtomicBool, // TODO this field is why the current implementation doesn't quite
-                                // work with multiple threads; really this field should be a thread local or I need to do
-                                // something else to determine whether a thread is alredy in a counter when pushing it to the
-                                // stack
+    // work with multiple threads; really this field should be a thread local or I need to do
+    // something else to determine whether a thread is alredy in a counter when pushing it to the
+    // stack
     pub hits: AtomicU64,
+    pub data_size: AtomicU64, // amount of data processed by this counter
 }
 
 struct CounterStack {
@@ -226,6 +221,9 @@ impl Drop for ProfilingSection {
 #[macro_export]
 macro_rules! profile {
     ($name:expr) => {
+        profile!($name, 0u64)
+    };
+    ($name:expr, $value:expr) => {
         let _ = {
             #[$crate::distributed_slice($crate::COUNTERS)]
             static COUNTER: $crate::Counter = const {
@@ -235,9 +233,14 @@ macro_rules! profile {
                     name: $name,
                     in_counter: std::sync::atomic::AtomicBool::new(false),
                     hits: std::sync::atomic::AtomicU64::new(0),
+                    data_size: std::sync::atomic::AtomicU64::new(0),
                 }
             };
 
+            COUNTER.data_size.fetch_add($value as u64, std::sync::atomic::Ordering::Relaxed); // TODO
+            // do something other than as u64 here
+            // TODO confirm this gets optimized out when $value is 0 so that profile! uses that don't
+            // use data_size aren't slowed down more than they need to be
             $crate::start_counter(&COUNTER);
             &$crate::ProfilingSection
         };
@@ -247,7 +250,8 @@ macro_rules! profile {
 #[cfg(not(feature = "profile"))]
 #[macro_export]
 macro_rules! profile {
-    ($name:expr) => {}
+    ($name:expr) => {};
+    ($name:expr, $value:expr) => {}
 }
 
 #[macro_export]
@@ -270,18 +274,28 @@ fn print_counters() {
         leaf_counter,
         root_counter,
         hits,
+        data_size,
         ..
     } in &*COUNTERS
     {
         let leaf_time = Rdtsc(leaf_counter.load(Ordering::Relaxed));
-        let root_time = Rdtsc(root_counter.load(Ordering::Relaxed));
+        let root_time_count = root_counter.load(Ordering::Relaxed);
+        let root_time = Rdtsc(root_time_count);
         let hits = hits.load(Ordering::Relaxed);
-        let s = if hits == 1 {
-            ""
-        } else {
-            "s"
-        };
-        println!("For counter \"{name}\" with {hits} hit{s} got root time {root_time}, leaf time {leaf_time}");
+        let data_size = data_size.load(Ordering::Relaxed);
+        let s = if hits == 1 { "" } else { "s" };
+        print!(
+            "For counter \"{name}\" with {hits} hit{s} got root time {root_time}, leaf time {leaf_time}"
+        );
+        assert!(root_time_count <= 1 << 53);
+        let root_time_seconds = root_time_count as f64 / RDTSC_FREQUENCY;
+        assert!(data_size <= 1 << 53);
+        let throughput = data_size as f64 / root_time_seconds / 1e9;
+        let data_size_mb = data_size as f64 / 1e6;
+        if data_size != 0 {
+            print!(", procesed {data_size_mb:.3} MB at {throughput:.3} GB/s");
+        }
+        println!();
     }
 }
 

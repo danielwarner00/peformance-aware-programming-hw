@@ -18,7 +18,10 @@ fn main() -> Result<(), &'static str> {
     let mut haversine_count = 0usize;
     let sum: f64;
     {
-        profile!("compute haversines");
+        profile!(
+            "compute haversines",
+            input.pairs.len() * std::mem::size_of::<Pair>()
+        );
         sum = input
             .pairs
             .iter()
@@ -100,7 +103,7 @@ fn parse_input_test() {
 }
 
 fn parse_input(input: &[u8]) -> Option<Input> {
-    profile!("parse_input");
+    profile!("parse_input", input.len());
     let mut pairs = None;
     let mut sum = None;
     let mut average = None;
