@@ -1,17 +1,15 @@
 use perf_tools::profile;
-use std::io::Read;
 
 fn main() -> Result<(), &'static str> {
     profile!("main");
-    let mut input_buffer = Vec::new();
 
-    {
-        profile!("read input");
-        std::io::stdin()
-            .lock()
-            .read_to_end(&mut input_buffer)
-            .unwrap();
-    }
+    let path = std::env::args().nth(1).ok_or("no input file provided")?;
+    let file_len = std::fs::metadata(&path).unwrap().len();
+
+    let input_buffer = {
+        profile!("read input", file_len);
+        std::fs::read(&path).unwrap()
+    };
 
     let input = parse_input(&input_buffer).ok_or("could not parse input")?;
 
