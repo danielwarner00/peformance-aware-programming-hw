@@ -251,7 +251,7 @@ macro_rules! profile {
 #[macro_export]
 macro_rules! profile {
     ($name:expr) => {};
-    ($name:expr, $value:expr) => {}
+    ($name:expr, $value:expr) => {};
 }
 
 #[macro_export]
@@ -349,3 +349,94 @@ fn test_profile_block() {
     assert_eq!(10, x);
 }
 */
+
+// TODO be rigorous with wrapping in RepetitionTester
+
+pub struct RepetitionTester {
+    timeout: u64,            // in rdtsc units
+    last_updated_time: u64,  // in rdtsc units
+    start_time: Option<u64>, // in rdtsc units; None before start and after end
+    max_time: u64,
+    min_time: u64,
+    run_count: u64,
+    total_time: u64,
+}
+
+impl RepetitionTester {
+    pub fn new(timeout_seconds: f64) -> RepetitionTester {
+        RepetitionTester {
+            timeout: (RDTSC_FREQUENCY * timeout_seconds).ceil() as u64,
+            last_updated_time: u64::MAX, // this value should never be read
+            start_time: None,
+            max_time: 0,
+            min_time: u64::MAX,
+            total_time: 0,
+            run_count: 0,
+        }
+    }
+
+    pub fn continue_test(&self) -> bool {
+        let now = rdtsc();
+        self.run_count == 0 || now < self.last_updated_time + self.timeout
+    }
+
+    pub fn start(&mut self) {
+        assert!(
+            self.start_time.is_none(),
+            "called RepetitionTester::start while already started"
+        );
+        self.start_time = Some(rdtsc());
+    }
+
+    pub fn end(&mut self) {
+        let now = rdtsc();
+        let start_time = self.start_time.expect("Repetition::start was not called");
+        self.start_time = None;
+
+        let duration = now - start_time;
+        if self.run_count == 0 {
+            self.last_updated_time = now;
+        }
+        if duration > self.max_time {
+            self.max_time = duration;
+            self.last_updated_time = now;
+        }
+        if duration < self.min_time {
+            self.min_time = duration;
+            self.last_updated_time = now;
+        }
+        self.total_time += duration;
+        self.run_count += 1;
+    }
+
+    pub fn print_stats(&self, name: &str) {
+        let max_time = self.max_time as f64 / RDTSC_FREQUENCY * 1000f64;
+        let min_time = self.min_time as f64 / RDTSC_FREQUENCY * 1000f64;
+        let total_time = self.total_time as f64 / RDTSC_FREQUENCY * 1000f64;
+        let mean_time = total_time / self.run_count as f64;
+        println!(
+            "Completed repetition test {name}\
+                  \n    max time: {max_time:.3} ms\
+                  \n    min time: {min_time:.3} ms\
+                  \n    mean time: {mean_time:.3} ms\
+        "
+        );
+    }
+}
+
+// TODO improve this test
+#[test]
+fn repition_test() {
+    let mut tester = RepetitionTester::new(1f64);
+    while tester.continue_test() {
+        let mut _x = 10; // setup
+
+        tester.start();
+
+        _x += 1;
+
+        tester.end();
+
+        _x = 0; // cleanup
+    }
+}
