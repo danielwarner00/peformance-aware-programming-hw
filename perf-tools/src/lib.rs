@@ -36,6 +36,18 @@ pub fn gettime(clockid: libc::clockid_t) -> Result<Duration, ()> {
     }
 }
 
+pub fn get_page_faults() -> u64 {
+    let mut usage = std::mem::MaybeUninit::<libc::rusage>::uninit();
+
+    assert!(unsafe {
+        libc::getrusage(libc::RUSAGE_SELF, usage.as_mut_ptr())
+    } == 0);
+
+    let usage = unsafe { usage.assume_init() };
+
+    (usage.ru_minflt + usage.ru_majflt).try_into().unwrap()
+}
+
 #[cfg(feature = "profile")]
 struct Rdtsc(u64);
 
@@ -350,16 +362,22 @@ fn test_profile_block() {
 }
 */
 
+struct StartData {
+    time: u64, // in rdtsc units
+    page_faults: u64,
+}
+
 // TODO be rigorous with wrapping in RepetitionTester
 
 pub struct RepetitionTester {
     timeout: u64,            // in rdtsc units
     last_updated_time: u64,  // in rdtsc units
-    start_time: Option<u64>, // in rdtsc units; None before start and after end
+    start_data: Option<StartData>, // None before start and after end
     max_time: u64,
     min_time: u64,
     run_count: u64,
     total_time: u64,
+    total_page_faults: u64,
 }
 
 impl RepetitionTester {
@@ -367,11 +385,12 @@ impl RepetitionTester {
         RepetitionTester {
             timeout: (RDTSC_FREQUENCY * timeout_seconds).ceil() as u64,
             last_updated_time: u64::MAX, // this value should never be read
-            start_time: None,
+            start_data: None,
             max_time: 0,
             min_time: u64::MAX,
             total_time: 0,
             run_count: 0,
+            total_page_faults: 0,
         }
     }
 
@@ -382,16 +401,23 @@ impl RepetitionTester {
 
     pub fn start(&mut self) {
         assert!(
-            self.start_time.is_none(),
+            self.start_data.is_none(),
             "called RepetitionTester::start while already started"
         );
-        self.start_time = Some(rdtsc());
+        self.start_data = Some(StartData {
+            page_faults: get_page_faults(),
+            time: rdtsc(), // this must be last to make measurements most accurate
+        });
     }
 
     pub fn end(&mut self) {
         let now = rdtsc();
-        let start_time = self.start_time.expect("Repetition::start was not called");
-        self.start_time = None;
+        let end_page_faults = get_page_faults();
+
+        let StartData {
+            time: start_time,
+            page_faults: start_page_faults,
+        } = self.start_data.take().expect("Repetition::start was not called");
 
         let duration = now - start_time;
         if self.run_count == 0 {
@@ -405,6 +431,8 @@ impl RepetitionTester {
             self.min_time = duration;
             self.last_updated_time = now;
         }
+        assert!(end_page_faults >= start_page_faults);
+        self.total_page_faults += end_page_faults - start_page_faults;
         self.total_time += duration;
         self.run_count += 1;
     }
@@ -414,11 +442,13 @@ impl RepetitionTester {
         let min_time = self.min_time as f64 / RDTSC_FREQUENCY * 1000f64;
         let total_time = self.total_time as f64 / RDTSC_FREQUENCY * 1000f64;
         let mean_time = total_time / self.run_count as f64;
+        let page_faults_per_run = self.total_page_faults as f64 / self.run_count as f64;
         println!(
             "Completed repetition test {name}\
                   \n    max time: {max_time:.3} ms\
                   \n    min time: {min_time:.3} ms\
                   \n    mean time: {mean_time:.3} ms\
+                  \n    page faults per run: {page_faults_per_run:.3}\
         "
         );
     }

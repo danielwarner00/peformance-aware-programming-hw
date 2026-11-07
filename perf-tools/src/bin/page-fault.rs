@@ -1,7 +1,7 @@
 use perf_tools::RepetitionTester;
 use std::io::Read;
 
-const RESUSE_BUFFER: bool = false;
+const RESUSE_BUFFER: bool = true;
 
 fn main() {
     let test_path = std::env::args().nth(1).expect("test file not provided");
